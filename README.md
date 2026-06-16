@@ -51,9 +51,10 @@ npm start
 
 ## GitHub updater
 
-WOLFHQ checks GitHub Releases from `LairOfWolf/WOLFHQ`. Because the repo is
-private, add a GitHub fine-grained token in **Settings > GitHub Auto-Updater**
-with read-only repository contents access. WOLFHQ encrypts that token on this PC.
+WOLFHQ checks public GitHub Releases from `LairOfWolf/WOLFHQ` automatically on
+startup. If a newer release exists, the top-bar **UPDATE** button downloads the
+Windows installer, launches it, and closes WOLFHQ so the updated app can restart
+from the installer flow.
 
 To publish an update, bump `package.json` version, commit, then push a matching
 tag:
@@ -64,4 +65,4 @@ git push origin main --tags
 ```
 
 GitHub Actions builds the Windows installer and zip, attaches them to the
-release, and the WOLFHQ **UPDATE** button downloads the newest release asset.
+release, and WOLFHQ downloads the newest installer asset from that release.

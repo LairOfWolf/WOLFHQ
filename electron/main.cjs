@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("ele
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 const { RemoteServer, isAbsoluteRemotePath, normalizeRemotePath } = require("./remote.cjs");
 const { OpsManager } = require("./ops.cjs");
@@ -21,7 +21,7 @@ const SKIP_DIRECTORIES = new Set([".git", "node_modules", "cache", ".cache", "di
 const MAX_TEXT_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_SCAN_ENTRIES = 60000;
 const DEFAULT_UPDATER_SETTINGS = {
-  repo: "",
+  repo: "LairOfWolf/WOLFHQ",
   checkOnStartup: true,
   includePrerelease: false,
   encryptedToken: ""
@@ -119,7 +119,7 @@ function normalizeGitHubRepo(value) {
 }
 
 function normalizeUpdaterSettings(input = {}, current = {}) {
-  const repo = normalizeGitHubRepo(input.repo);
+  const repo = normalizeGitHubRepo(input.repo) || DEFAULT_UPDATER_SETTINGS.repo;
   return {
     repo,
     checkOnStartup: input.checkOnStartup !== false,
@@ -244,6 +244,17 @@ function pickReleaseAsset(release) {
     || assets[0];
 }
 
+function launchDownloadedUpdate(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension !== ".exe" && extension !== ".msi") return false;
+  const child = extension === ".msi"
+    ? spawn("msiexec.exe", ["/i", filePath], { detached: true, stdio: "ignore" })
+    : spawn(filePath, [], { detached: true, stdio: "ignore" });
+  child.unref();
+  setTimeout(() => app.quit(), 1400);
+  return true;
+}
+
 async function downloadGithubUpdate(input = {}) {
   const current = await readUpdaterSettings();
   const settings = input.repo ? normalizeUpdaterSettings(input, current) : current;
@@ -262,13 +273,17 @@ async function downloadGithubUpdate(input = {}) {
   const safeName = asset.name.replace(/[<>:"/\\|?*]/g, "_");
   const destination = path.join(app.getPath("downloads"), safeName);
   await fs.writeFile(destination, bytes);
-  shell.showItemInFolder(destination);
+  const installing = input.install !== false && launchDownloadedUpdate(destination);
+  if (!installing) shell.showItemInFolder(destination);
   return {
     ...latest,
     downloaded: true,
+    installing,
     filePath: destination,
     fileName: safeName,
-    message: `Downloaded ${safeName} to your Downloads folder.`
+    message: installing
+      ? `Downloaded ${safeName}. The installer is launching and WOLFHQ will close so the update can finish.`
+      : `Downloaded ${safeName} to your Downloads folder.`
   };
 }
 

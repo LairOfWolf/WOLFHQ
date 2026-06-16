@@ -601,18 +601,6 @@ button { color: inherit; }
 .settings-card > .ops-check { flex-direction: row; justify-content: flex-start; }
 .settings-card > .ops-check input { width: 14px; height: 14px; padding: 0; flex: none; }
 .settings-card .primary-action, .settings-card .secondary-action { margin-top: 12px; }
-.updater-card { min-height: 290px; background: radial-gradient(circle at 88% 0, rgba(88, 255, 209, .09), transparent 34%), rgba(7, 11, 23, .93); }
-.updater-state { min-height: 34px; margin-top: 10px; padding: 0 10px; border: 1px solid rgba(91, 144, 184, .13); background: #070b16; display: flex; align-items: center; gap: 7px; color: #85a0b5; font: 8px "JetBrains Mono"; }
-.updater-state.available { border-color: rgba(88, 255, 209, .24); color: var(--green); background: rgba(88, 255, 209, .04); }
-.updater-hint { margin-top: 9px; padding: 8px; border: 1px solid rgba(157, 115, 255, .16); background: rgba(157, 115, 255, .035); color: #8c7fbb; display: flex; align-items: flex-start; gap: 7px; font: 8px/1.5 "JetBrains Mono"; }
-.updater-hint svg { flex: none; color: #bca9ff; }
-.updater-release { margin-top: 9px; padding: 10px; border: 1px solid rgba(80, 223, 249, .13); background: rgba(80, 223, 249, .035); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.updater-release span, .updater-release strong, .updater-release small { display: block; color: #7f99ae; font: 8px "JetBrains Mono"; }
-.updater-release strong { color: #d3f9ff; }
-.updater-release small { color: #58ffd1; }
-.updater-actions { margin-top: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
-.updater-actions .primary-action,
-.updater-actions .secondary-action { margin-top: 8px; }
 .connection-result { margin-top: 12px; display: flex; align-items: center; gap: 6px; color: #ff718f; font: 8px "JetBrains Mono"; }
 .connection-result.online, .bridge-state .online { color: var(--green); }
 .bridge-state { min-height: 36px; padding: 0 10px; border: 1px solid rgba(91, 144, 184, .13); background: #070b16; display: flex; align-items: center; }
@@ -632,12 +620,6 @@ button { color: inherit; }
 .focused-stage .settings-card > label { color: #8fa5b8; font-size: 11px; }
 .focused-stage .settings-card > label input { height: 42px; font-size: 12px; }
 .focused-stage .settings-card > .ops-check input { width: 16px; height: 16px; }
-.focused-stage .updater-state { min-height: 42px; color: #9bb1c2; font-size: 11px; }
-.focused-stage .updater-state.available { color: var(--green); }
-.focused-stage .updater-hint { padding: 11px; color: #aaa0cf; font-size: 10px; }
-.focused-stage .updater-release span,
-.focused-stage .updater-release strong,
-.focused-stage .updater-release small { font-size: 10px; }
 .focused-stage .connection-result,
 .focused-stage .bridge-state span { font-size: 11px; }
 .focused-stage .runtime-grid span { color: #7891a7; font-size: 10px; }

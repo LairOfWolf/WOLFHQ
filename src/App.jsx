@@ -60,8 +60,7 @@ const api = window.neonCore || {
   searchAiFiles: async () => ({ indexedFiles: 0, results: [] }),
   proposeAiChanges: async () => ({ summary: "", indexedFiles: 0, contextFiles: 0, files: [] }),
   applyAiChanges: async () => null,
-  getUpdaterSettings: async () => ({ repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false, hasToken: false }),
-  saveUpdaterSettings: async (input) => input,
+  getUpdaterSettings: async () => ({ repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false }),
   checkForUpdate: async () => ({ available: false, currentVersion: "2.1.0", latestVersion: "2.1.0", assets: [] }),
   downloadUpdate: async () => null,
   openExternal: async () => null,
@@ -298,11 +297,11 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState([]);
   const [aiBusy, setAiBusy] = useState(false);
   const [updater, setUpdater] = useState({
-    settings: { repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false, token: "", hasToken: false },
+    settings: { repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false },
     latest: null,
     checking: false,
     downloading: false,
-    status: "Linked to LairOfWolf/WOLFHQ. Add a GitHub token for private releases."
+    status: "Linked to LairOfWolf/WOLFHQ."
   });
   const [resourceDraft, setResourceDraft] = useState({
     name: "wolfhq-custom", description: "Custom gameplay resource", author: "WOLFHQ",
@@ -336,15 +335,11 @@ export default function App() {
     let cancelled = false;
     api.getUpdaterSettings().then(async (settings) => {
       if (cancelled) return;
-      setUpdater((current) => ({ ...current, settings: { ...current.settings, ...settings, token: "" } }));
-      if (!settings.repo) {
-        setUpdater((current) => ({ ...current, status: "Add your GitHub owner/repo in Settings to enable updates." }));
-        return;
-      }
-      if (!settings.checkOnStartup) return;
+      const nextSettings = { ...settings, repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false };
+      setUpdater((current) => ({ ...current, settings: nextSettings }));
       setUpdater((current) => ({ ...current, checking: true, status: "Checking GitHub releases..." }));
       try {
-        const latest = await api.checkForUpdate(settings);
+        const latest = await api.checkForUpdate(nextSettings);
         if (cancelled) return;
         setUpdater((current) => ({
           ...current,
@@ -352,6 +347,7 @@ export default function App() {
           checking: false,
           status: latest.available ? `Update ${latest.latestVersion} is ready to download.` : `WOLFHQ ${latest.currentVersion} is up to date.`
         }));
+        if (latest.available) notify(`WOLFHQ update ${latest.latestVersion} is ready`);
       } catch (error) {
         if (!cancelled) setUpdater((current) => ({ ...current, checking: false, status: cleanErrorMessage(error.message) }));
       }
@@ -361,7 +357,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [notify]);
 
   const loadOperations = useCallback(async () => {
     if (!project) return;
@@ -897,16 +893,6 @@ export default function App() {
       const settings = await api.updateOpsSettings(opsSettings);
       setOpsSettings(settings);
       notify("Operations settings saved");
-    } catch (error) {
-      notify(error.message);
-    }
-  }
-
-  async function saveUpdaterSettings() {
-    try {
-      const settings = await api.saveUpdaterSettings(updater.settings);
-      setUpdater((current) => ({ ...current, settings: { ...current.settings, ...settings, token: "" }, status: `Linked to GitHub releases: ${settings.repo}` }));
-      notify("Updater GitHub channel saved");
     } catch (error) {
       notify(error.message);
     }
@@ -1837,30 +1823,6 @@ export default function App() {
                       <span className={controlStatus.running ? "online" : ""}><Circle size={8} fill="currentColor" /> {controlStatus.running ? "RUNNING" : controlStatus.installed ? "INSTALLED / RESTART REQUIRED" : "NOT INSTALLED"}</span>
                     </div>
                     <button className="secondary-action" onClick={installBridge}><ShieldCheck size={15} /> INSTALL / REPAIR BRIDGE</button>
-                  </div>
-                  <div className="settings-card updater-card panel-corners">
-                    <div className="settings-title"><Download size={18} /><span><strong>GITHUB AUTO-UPDATER</strong><small>Checks your GitHub Releases channel and downloads the latest installer asset.</small></span></div>
-                    <label>GitHub release repo<input placeholder="owner/repo or https://github.com/owner/repo" value={updater.settings.repo} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, repo: event.target.value } }))} /></label>
-                    <label>Private repo token<input type="password" placeholder={updater.settings.hasToken ? "Encrypted token saved - leave blank to keep it" : "GitHub fine-grained token for private releases"} value={updater.settings.token || ""} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, token: event.target.value } }))} /></label>
-                    <label className="ops-check"><input type="checkbox" checked={Boolean(updater.settings.checkOnStartup)} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, checkOnStartup: event.target.checked } }))} /> Check for updates when WOLFHQ starts</label>
-                    <label className="ops-check"><input type="checkbox" checked={Boolean(updater.settings.includePrerelease)} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, includePrerelease: event.target.checked } }))} /> Include pre-release builds</label>
-                    <div className="updater-hint"><LockKeyhole size={13} /> Private GitHub repos need a token with read-only Contents access. WOLFHQ encrypts it on this PC.</div>
-                    <div className={`updater-state ${updater.latest?.available ? "available" : ""}`}>
-                      <Circle size={8} fill="currentColor" />
-                      <span>{updater.status}</span>
-                    </div>
-                    {updater.latest && (
-                      <div className="updater-release">
-                        <span>CURRENT {updater.latest.currentVersion}</span>
-                        <strong>LATEST {updater.latest.latestVersion}</strong>
-                        <small>{updater.latest.assets?.length || 0} DOWNLOAD ASSETS</small>
-                      </div>
-                    )}
-                    <div className="updater-actions">
-                      <button className="secondary-action" onClick={saveUpdaterSettings}><Save size={13} /> SAVE CHANNEL</button>
-                      <button className={updater.checking ? "secondary-action spinning" : "secondary-action"} onClick={checkAppUpdate} disabled={updater.checking}><RefreshCw size={13} /> CHECK</button>
-                      <button className={updater.downloading ? "primary-action compact spinning" : "primary-action compact"} onClick={downloadAppUpdate} disabled={updater.downloading}><Download size={13} /> DOWNLOAD LATEST</button>
-                    </div>
                   </div>
                   <div className="settings-card panel-corners">
                     <div className="settings-title"><Cpu size={18} /><span><strong>RUNTIME PROCESS</strong><small>Metrics are linked to the process owning the live FiveM port.</small></span></div>
