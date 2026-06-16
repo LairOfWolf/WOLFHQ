@@ -687,7 +687,7 @@ function controlBridgeFiles() {
     "",
     "author 'WOLFHQ'",
     "description 'Local authenticated bridge for the WOLFHQ desktop command center'",
-    "version '2.1.0'",
+    "version '2.1.1'",
     "",
     "server_script 'server.lua'",
     ""
@@ -766,6 +766,9 @@ SetHttpHandler(function(req, res)
         for _, source in ipairs(GetPlayers()) do result[#result + 1] = playerData(source) end
         return sendJson(res, 200, result)
     end
+    if req.method == 'GET' and req.path:match('/bans$') then
+        return sendJson(res, 200, bans)
+    end
     if req.method == 'GET' and req.path:match('/resources$') then
         return sendJson(res, 200, resourceData())
     end
@@ -815,9 +818,10 @@ SetHttpHandler(function(req, res)
         end
 
         if req.method == 'POST' and req.path:match('/player$') then
-            local source = tostring(tonumber(payload.id) or '')
+            local source = tonumber(payload.id)
             local action = tostring(payload.action or '')
             local reason = tostring(payload.reason or 'WOLFHQ administration'):gsub('[\\r\\n]', ' '):sub(1, 180)
+            if not source then return sendJson(res, 400, { ok = false, error = 'player id required' }) end
             if GetPlayerName(source) == nil then return sendJson(res, 404, { ok = false, error = 'player not found' }) end
             if action == 'ban' then
                 bans[#bans + 1] = {
@@ -852,7 +856,10 @@ async function installControlBridge() {
     activeProject = await remoteServer.scan();
     try {
       const health = await remoteServer.callControl("health", null, "GET");
-      if (health?.ok) return { ...result, requiresServerRestart: false, running: true };
+      if (health?.ok) {
+        await remoteServer.callControl("command", { command: "restart wolfhq-control" }).catch(() => {});
+        return { ...result, requiresServerRestart: false, running: true, restarted: true };
+      }
     } catch {}
     return result;
   }
@@ -884,7 +891,10 @@ async function installControlBridge() {
   activeProject.mode = "local";
   try {
     const health = await callControl(endpointFromConfig(), "health", null, "GET");
-    if (health?.ok) return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: false, running: true };
+    if (health?.ok) {
+      await callControl(endpointFromConfig(), "command", { command: "restart wolfhq-control" }).catch(() => {});
+      return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: false, running: true, restarted: true };
+    }
   } catch {}
   return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
 }
@@ -1381,11 +1391,15 @@ ipcMain.handle("console:command", (_event, endpoint, command) =>
   getOpsManager().consoleCommand(endpoint, command)
 );
 ipcMain.handle("players:details", async (_event, endpoint) => {
+  let players = [];
+  let bans = [];
   try {
-    return await callControl(endpoint, "players", null, "GET");
+    players = await callControl(endpoint, "players", null, "GET");
+    bans = await callControl(endpoint, "bans", null, "GET").catch(() => []);
   } catch {
-    return (await getCurrentStatus(endpoint)).players || [];
+    players = (await getCurrentStatus(endpoint)).players || [];
   }
+  return getOpsManager().enrichPlayers(Array.isArray(players) ? players : [], Array.isArray(bans) ? bans : []);
 });
 ipcMain.handle("player:action", (_event, endpoint, options) =>
   getOpsManager().playerAction(endpoint, options || {})

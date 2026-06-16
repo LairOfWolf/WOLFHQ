@@ -12,7 +12,7 @@ const MAX_PLAYER_HISTORY = 1000;
 const ROLE_PERMISSIONS = {
   owner: new Set(["*"]),
   admin: new Set(["resource", "catalog", "backup", "console", "player", "git", "database", "settings", "ai"]),
-  developer: new Set(["resource", "catalog", "backup", "console", "git", "ai"])
+  developer: new Set(["resource", "catalog", "backup", "console", "player", "git", "ai"])
 };
 
 function sanitizeLabel(value, fallback = "snapshot") {
@@ -211,11 +211,39 @@ class OpsManager {
         previous.name = player.name;
         previous.ping = player.ping;
         previous.identifiers = identifiers;
+        previous.seenCount = Number(previous.seenCount || 1) + 1;
       } else {
-        history.unshift({ key, name: player.name, identifiers, firstSeen: now, lastSeen: now, ping: player.ping });
+        history.unshift({ key, name: player.name, identifiers, firstSeen: now, lastSeen: now, ping: player.ping, seenCount: 1 });
       }
     }
     await this.writeStore("player-history", history.slice(0, MAX_PLAYER_HISTORY));
+  }
+
+  async enrichPlayers(players = [], bridgeBans = []) {
+    const [history, notes, localBans] = await Promise.all([
+      this.readStore("player-history", []),
+      this.readStore("player-notes", {}),
+      this.readStore("player-bans", [])
+    ]);
+    const allBans = [...bridgeBans, ...localBans].filter(Boolean);
+    return players.map((player) => {
+      const identifiers = Array.isArray(player.identifiers) ? player.identifiers : [];
+      const key = identifiers[0] || `${player.name}:${player.id}`;
+      const historical = history.find((entry) => entry.key === key
+        || identifiers.some((identifier) => (entry.identifiers || []).includes(identifier)));
+      const recentBans = allBans.filter((ban) => {
+        const bannedIdentifiers = Array.isArray(ban.identifiers) ? ban.identifiers : [];
+        return identifiers.some((identifier) => bannedIdentifiers.includes(identifier));
+      }).slice(0, 5);
+      return {
+        ...player,
+        identifiers,
+        key,
+        note: notes[key] || "",
+        history: historical || null,
+        recentBans
+      };
+    });
   }
 
   async getDashboard() {
@@ -261,6 +289,18 @@ class OpsManager {
       action: options.action,
       reason: String(options.reason || "WOLFHQ administration").slice(0, 180)
     });
+    if (options.action === "ban") {
+      const bans = await this.readStore("player-bans", []);
+      bans.unshift({
+        id: crypto.randomUUID(),
+        name: options.name || `Player ${options.id}`,
+        identifiers: Array.isArray(options.identifiers) ? options.identifiers : [],
+        reason: String(options.reason || "WOLFHQ administration").slice(0, 180),
+        createdAt: new Date().toISOString(),
+        source: "WOLFHQ"
+      });
+      await this.writeStore("player-bans", bans.slice(0, 500));
+    }
     await this.audit(`player.${options.action}`, { id: Number(options.id), name: options.name, reason: options.reason });
     return result;
   }

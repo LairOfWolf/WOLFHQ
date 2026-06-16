@@ -305,6 +305,7 @@ export default function App() {
   const [dbTables, setDbTables] = useState([]);
   const [dbTable, setDbTable] = useState("");
   const [dbRows, setDbRows] = useState({ rows: [], columns: [] });
+  const [dbEditor, setDbEditor] = useState(null);
   const [accountDraft, setAccountDraft] = useState({ username: "", role: "developer", password: "" });
   const [accountLogin, setAccountLogin] = useState({ id: "", password: "" });
   const [opsSettings, setOpsSettings] = useState({ crashDetection: true, autoRestart: false, restartCommand: "", discordWebhook: "", backupSchedule: "manual" });
@@ -452,7 +453,11 @@ export default function App() {
 
   useEffect(() => {
     if (!project || activeView !== "players") return;
-    const loadPlayers = async () => setPlayerDetails(await api.getPlayerDetails(endpoint));
+    const loadPlayers = async () => {
+      const [players, dashboard] = await Promise.all([api.getPlayerDetails(endpoint), api.getOpsDashboard()]);
+      setPlayerDetails(players);
+      setOpsData(dashboard);
+    };
     loadPlayers().catch(() => setPlayerDetails(status.players || []));
     const timer = window.setInterval(() => loadPlayers().catch(() => {}), 4000);
     return () => window.clearInterval(timer);
@@ -851,9 +856,10 @@ export default function App() {
     if (reason === null) return;
     if (action === "ban" && !window.confirm(`Ban ${player.name} using their current identifiers?`)) return;
     try {
-      await api.playerAction(endpoint, { id: player.id, name: player.name, action, reason });
+      await api.playerAction(endpoint, { id: player.id, name: player.name, identifiers: player.identifiers || [], action, reason });
       notify(`${player.name} ${action === "ban" ? "banned" : "kicked"}`);
       setPlayerDetails(await api.getPlayerDetails(endpoint));
+      setOpsData(await api.getOpsDashboard());
     } catch (error) {
       notify(error.message);
     }
@@ -933,25 +939,37 @@ export default function App() {
     }
   }
 
-  async function editDatabaseCell(row, column) {
+  function openDatabaseEditor(row, column) {
     const primaryKey = dbRows.columns.find((item) => item.Key === "PRI")?.Field;
     const where = primaryKey
       ? [{ column: primaryKey, value: row[primaryKey] }]
       : dbRows.columns.map((item) => ({ column: item.Field, value: row[item.Field] }));
     if (!where.length) return;
-    const currentValue = row[column] == null ? "NULL" : String(row[column]);
-    const value = window.prompt(`New value for ${column}:\n\nType NULL to save a database null value.`, currentValue);
-    if (value === null) return;
+    setDbEditor({
+      table: dbTable,
+      column,
+      where,
+      original: row[column],
+      value: row[column] == null ? "" : String(row[column]),
+      valueIsNull: row[column] == null,
+      keyLabel: primaryKey ? `${primaryKey}=${row[primaryKey]}` : "full-row match"
+    });
+  }
+
+  async function saveDatabaseEditor(event) {
+    event.preventDefault();
+    if (!dbEditor) return;
     try {
       const result = await api.databaseUpdate(dbConfig, {
-        table: dbTable,
-        column,
-        value: value.trim().toUpperCase() === "NULL" ? null : value,
-        valueIsNull: value.trim().toUpperCase() === "NULL",
-        where
+        table: dbEditor.table,
+        column: dbEditor.column,
+        value: dbEditor.valueIsNull ? null : dbEditor.value,
+        valueIsNull: dbEditor.valueIsNull,
+        where: dbEditor.where
       });
-      setDbRows(await api.databaseRows(dbConfig, dbTable));
-      notify(result?.affectedRows ? `${dbTable}.${column} saved` : `${dbTable}.${column} was already up to date`);
+      setDbRows(await api.databaseRows(dbConfig, dbEditor.table));
+      notify(result?.affectedRows ? `${dbEditor.table}.${dbEditor.column} saved` : `${dbEditor.table}.${dbEditor.column} was already up to date`);
+      setDbEditor(null);
     } catch (error) {
       notify(error.message);
     }
@@ -1192,6 +1210,18 @@ export default function App() {
     `${antiCheat.provider} // ${antiCheat.resourceName}` === antiCheatDisplay
   ), [detectedAntiCheats, antiCheatDisplay]);
   const nekoSelected = antiCheatDisplay === "Neko Anti-Cheat";
+  const recentPlayerBans = useMemo(() => {
+    const seen = new Set();
+    return playerDetails
+      .flatMap((player) => (player.recentBans || []).map((ban) => ({ ...ban, playerName: player.name })))
+      .filter((ban) => {
+        const key = `${ban.name || ban.playerName}-${ban.createdAt}-${ban.reason}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  }, [playerDetails]);
   const selectableAiModels = useMemo(() => {
     if (aiModels.some((model) => model.id === aiSettings.model)) return aiModels;
     return [{ id: aiSettings.model, name: aiSettings.model }, ...aiModels].filter((model) => model.id);
@@ -1637,29 +1667,67 @@ export default function App() {
               )}
 
               {activeView === "players" && (
-                <section className="command-page panel-corners">
+                <section className="command-page player-page panel-corners">
                   <div className="command-page-head">
-                    <div><Users size={20} /><span><strong>LIVE PLAYER MATRIX</strong><small>Direct data from the active FiveM players endpoint</small></span></div>
-                    <strong>{status.playerCount}/{status.maxPlayers || project.config.maxClients || "--"} CONNECTED</strong>
+                    <div><Users size={20} /><span><strong>LIVE PLAYER MATRIX</strong><small>Live endpoint data, WOLFHQ notes, identifiers, and recent admin history</small></span></div>
+                    <div className="player-head-actions">
+                      <button onClick={async () => setPlayerDetails(await api.getPlayerDetails(endpoint))}><RefreshCw size={14} /> REFRESH</button>
+                      <strong>{status.playerCount}/{status.maxPlayers || project.config.maxClients || "--"} CONNECTED</strong>
+                    </div>
                   </div>
-                  <div className="player-table">
-                    <div className="player-table-head admin"><span>ID</span><span>PLAYER / IDENTIFIER</span><span>PING</span><span>ACTIONS</span></div>
-                    {playerDetails.map((player) => (
-                      <div className="player-row" key={`${player.id}-${player.name}`}>
-                        <span>#{player.id}</span>
-                        <strong><i /><span>{player.name || "Unknown player"}<small>{player.identifiers?.[0] || player.endpoint || "Protected"}</small></span></strong>
-                        <span>{player.ping ?? "--"} ms</span>
-                        <div className="player-actions">
-                          <button onClick={() => editPlayerNote(player)}><FileCode2 size={13} /> NOTE</button>
-                          <button onClick={() => administerPlayer(player, "kick")}><UserX size={13} /> KICK</button>
-                          <button className="danger" onClick={() => administerPlayer(player, "ban")}><Ban size={13} /> BAN</button>
-                        </div>
+                  <div className="player-command-layout">
+                    <div className="player-card-list">
+                      {playerDetails.map((player) => (
+                        <article className="player-admin-card" key={`${player.id}-${player.name}`}>
+                          <div className="player-card-top">
+                            <span className="player-live-dot" />
+                            <div>
+                              <strong>{player.name || "Unknown player"}</strong>
+                              <small>SERVER ID #{player.id} // {player.ping ?? "--"} MS</small>
+                            </div>
+                            <i>{player.recentBans?.length ? "BAN HISTORY" : "CLEAR"}</i>
+                          </div>
+                          <div className="player-identifiers">
+                            {(player.identifiers || []).slice(0, 4).map((identifier) => <code key={identifier}>{identifier}</code>)}
+                            {!player.identifiers?.length && <code>{player.endpoint || "Protected endpoint"}</code>}
+                          </div>
+                          <div className="player-card-stats">
+                            <div><span>FIRST SEEN</span><strong>{player.history?.firstSeen ? new Date(player.history.firstSeen).toLocaleString() : "This session"}</strong></div>
+                            <div><span>LAST SEEN</span><strong>{player.history?.lastSeen ? new Date(player.history.lastSeen).toLocaleString() : "Live now"}</strong></div>
+                            <div><span>WOLFHQ NOTE</span><strong>{player.note ? "SAVED" : "NONE"}</strong></div>
+                          </div>
+                          {player.recentBans?.length ? (
+                            <div className="player-ban-warning"><Ban size={14} /><span>Recent WOLFHQ ban: {player.recentBans[0].reason || "No reason"} // {player.recentBans[0].createdAt ? new Date(player.recentBans[0].createdAt).toLocaleString() : "unknown time"}</span></div>
+                          ) : (
+                            <div className="player-ban-clear"><ShieldCheck size={14} /><span>No matching WOLFHQ ban record for this identifier.</span></div>
+                          )}
+                          <div className="player-actions">
+                            <button onClick={() => editPlayerNote(player)}><FileCode2 size={13} /> NOTE</button>
+                            <button onClick={() => administerPlayer(player, "kick")}><UserX size={13} /> KICK</button>
+                            <button className="danger" onClick={() => administerPlayer(player, "ban")}><Ban size={13} /> BAN</button>
+                          </div>
+                        </article>
+                      ))}
+                      {!playerDetails.length && (
+                        <div className="page-empty"><Wifi size={38} /><strong>NO PLAYERS CONNECTED</strong><p>The list refreshes from `{status.endpoint || endpoint}/players.json` every four seconds.</p></div>
+                      )}
+                    </div>
+                    <aside className="player-side-panel">
+                      <div className="player-side-card">
+                        <span><Users size={16} /> SESSION INTEL</span>
+                        <div><strong>{playerDetails.length}</strong><small>live players indexed</small></div>
+                        <div><strong>{opsData.playerHistory?.length || 0}</strong><small>historical players stored on this PC</small></div>
+                        <div><strong>{recentPlayerBans.length}</strong><small>recent matching ban records</small></div>
                       </div>
-                    ))}
-                    {!playerDetails.length && (
-                      <div className="page-empty"><Wifi size={38} /><strong>NO PLAYERS CONNECTED</strong><p>The list refreshes from `{status.endpoint || endpoint}/players.json` every four seconds.</p></div>
-                    )}
-                  </div>
+                      <div className="player-side-card ban-feed">
+                        <span><Ban size={16} /> RECENT SERVER BANS</span>
+                        {recentPlayerBans.map((ban, index) => (
+                          <div key={`${ban.createdAt}-${index}`}><strong>{ban.name || ban.playerName || "Unknown"}</strong><small>{ban.reason || "No reason supplied"}</small><em>{ban.createdAt ? new Date(ban.createdAt).toLocaleString() : "unknown time"}</em></div>
+                        ))}
+                        {!recentPlayerBans.length && <p>No matching WOLFHQ bans for the currently connected identifiers.</p>}
+                      </div>
+                    </aside>
+                        </div>
                 </section>
               )}
 
@@ -1744,7 +1812,7 @@ export default function App() {
                   </div>
 
                   <div className={`ops-card database-card panel-corners ${activeView !== "database" ? "module-hidden" : ""}`}>
-                    <div className="ops-title"><Database size={18} /><span><strong>DATABASE MANAGER</strong><small>MySQL browsing through the SSH tunnel with parameterized single-cell edits</small></span></div>
+                    <div className="ops-title"><Database size={18} /><span><strong>DATABASE MANAGER</strong><small>Click any visible cell to edit and save it back to MySQL with parameterized writes</small></span></div>
                     <div className="db-connect">
                       <input placeholder="Host" value={dbConfig.host} onChange={(event) => setDbConfig({ ...dbConfig, host: event.target.value })} />
                       <input type="number" placeholder="Port" value={dbConfig.port} onChange={(event) => setDbConfig({ ...dbConfig, port: Number(event.target.value) })} />
@@ -1758,9 +1826,9 @@ export default function App() {
                       <div className="db-table-wrap">
                         {dbRows.rows.length ? (
                           <table><thead><tr>{dbRows.columns.map((column) => <th key={column.Field}>{column.Field}</th>)}</tr></thead>
-                            <tbody>{dbRows.rows.slice(0, 100).map((row, rowIndex) => <tr key={rowIndex}>{dbRows.columns.map((column) => <td key={column.Field} onDoubleClick={() => editDatabaseCell(row, column.Field)} title="Double-click to edit">{row[column.Field] == null ? "NULL" : String(row[column.Field])}</td>)}</tr>)}</tbody>
+                            <tbody>{dbRows.rows.slice(0, 100).map((row, rowIndex) => <tr key={rowIndex}>{dbRows.columns.map((column) => <td key={column.Field} onClick={() => openDatabaseEditor(row, column.Field)} title="Click to edit this value">{row[column.Field] == null ? "NULL" : String(row[column.Field])}</td>)}</tr>)}</tbody>
                           </table>
-                        ) : <div className="compact-empty">Connect and select a table. Double-click a cell to edit it safely.</div>}
+                        ) : <div className="compact-empty">Connect and select a table. Click any cell to edit it safely.</div>}
                       </div>
                     </div>
                   </div>
@@ -2082,6 +2150,20 @@ export default function App() {
             </div>
             <div className="restart-confirm"><Clock size={15} /> Restart scheduled after confirmation. This cannot be canceled from WOLFHQ.</div>
             <button className="primary-action form-submit danger-submit" type="submit"><RotateCcw size={16} /> CONFIRM SERVER RESTART</button>
+          </form>
+        </Modal>
+      )}
+      {dbEditor && (
+        <Modal title="DATABASE CELL EDITOR" onClose={() => setDbEditor(null)}>
+          <form className="resource-form database-edit-form" onSubmit={saveDatabaseEditor}>
+            <div className="control-notice"><Database size={17} /><span>Editing `{dbEditor.table}.{dbEditor.column}` using {dbEditor.keyLabel}. This writes directly to MySQL when you save.</span></div>
+            <div className="form-row">
+              <label>Table<input readOnly value={dbEditor.table} /></label>
+              <label>Column<input readOnly value={dbEditor.column} /></label>
+            </div>
+            <label>Value<textarea autoFocus spellCheck="false" value={dbEditor.value} disabled={dbEditor.valueIsNull} onChange={(event) => setDbEditor({ ...dbEditor, value: event.target.value })} /></label>
+            <label className="remember-secret db-null-toggle"><input type="checkbox" checked={dbEditor.valueIsNull} onChange={(event) => setDbEditor({ ...dbEditor, valueIsNull: event.target.checked })} /><span /> Save this cell as SQL NULL</label>
+            <button className="primary-action form-submit" type="submit"><Save size={16} /> SAVE DATABASE VALUE</button>
           </form>
         </Modal>
       )}
