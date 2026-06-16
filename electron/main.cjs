@@ -217,7 +217,15 @@ async function checkForGithubUpdate(input = {}) {
   const apiUrl = settings.includePrerelease
     ? `https://api.github.com/repos/${settings.repo}/releases?per_page=10`
     : `https://api.github.com/repos/${settings.repo}/releases/latest`;
-  const data = await fetchJson(apiUrl, settings);
+  let data;
+  try {
+    data = await fetchJson(apiUrl, settings);
+  } catch (error) {
+    if (!settings.encryptedToken && /404|not found/i.test(error.message)) {
+      throw new Error("GitHub could not see that private repo. Add a private repo token in Settings, then save the updater channel.");
+    }
+    throw error;
+  }
   const release = Array.isArray(data)
     ? data.find((item) => !item.draft && (settings.includePrerelease || !item.prerelease))
     : data;
