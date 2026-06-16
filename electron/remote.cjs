@@ -14,6 +14,31 @@ const TEXT_EXTENSIONS = new Set([
 const SKIP_DIRECTORIES = new Set([".git", "node_modules", "cache", ".cache", "dist", "build"]);
 const MAX_TEXT_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_SCAN_ENTRIES = 60000;
+const CONTROL_BRIDGE_ACES = [
+  "add_ace resource.wolfhq-control command.quit allow",
+  "add_ace resource.wolfhq-control command.restart allow",
+  "add_ace resource.wolfhq-control command.start allow",
+  "add_ace resource.wolfhq-control command.stop allow",
+  "add_ace resource.wolfhq-control command.ensure allow"
+];
+
+function patchControlBridgeConfig(serverCfg) {
+  const missingAces = CONTROL_BRIDGE_ACES.filter((line) => {
+    const [, principal, object] = line.split(/\s+/);
+    return !new RegExp(`^\\s*add_ace\\s+${principal.replace(".", "\\.")}\\s+${object.replace(".", "\\.")}\\s+allow\\s*$`, "im").test(serverCfg);
+  });
+  const ensureLines = [];
+  if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
+  if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
+  if (!missingAces.length && !ensureLines.length) return { content: serverCfg, changed: false };
+  const prefix = missingAces.length
+    ? `# WOLFHQ desktop command bridge permissions\n${missingAces.join("\n")}\n\n`
+    : "";
+  const suffix = ensureLines.length
+    ? `${serverCfg.endsWith("\n") ? "" : "\n"}\n# WOLFHQ desktop command bridge\n${ensureLines.join("\n")}\n`
+    : "";
+  return { content: `${prefix}${serverCfg}${suffix}`, changed: true };
+}
 
 function detectFramework(signals) {
   const haystack = signals.join("\n").toLowerCase();
@@ -954,15 +979,8 @@ class RemoteServer {
     await this.writeFile(path.join(paths.resourceRoot, "fxmanifest.lua"), manifest);
     await this.writeFile(path.join(paths.resourceRoot, "server.lua"), serverScript);
     const serverCfg = (await this.readFileRaw(paths.configPath)).toString("utf8");
-    const ensureLines = [];
-    if (!/^\s*add_ace\s+resource\.wolfhq-control\s+command(?:\s|\.|\*)/im.test(serverCfg)) {
-      ensureLines.push("add_ace resource.wolfhq-control command allow");
-    }
-    if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
-    if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
-    if (ensureLines.length) {
-      await this.writeFile(paths.configPath, `${serverCfg}${serverCfg.endsWith("\n") ? "" : "\n"}\n# WOLFHQ desktop command bridge\n${ensureLines.join("\n")}\n`);
-    }
+    const patchedConfig = patchControlBridgeConfig(serverCfg);
+    if (patchedConfig.changed) await this.writeFile(paths.configPath, patchedConfig.content);
     return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
   }
 

@@ -717,8 +717,8 @@ export default function App() {
         latestStatus = await api.getControlStatus(endpoint);
       }
       setControlStatus(latestStatus);
-      if (latestStatus.running) notify("Control bridge is online and ready");
-      else if (result.requiresServerRestart) notify("Control bridge files and ensure lines are installed. Restart FXServer once, then WOLFHQ will reconnect.");
+      if (result.requiresServerRestart) notify("Control bridge permissions were updated. Restart FXServer once from txAdmin or the VPS terminal so quit/restart commands are allowed.");
+      else if (latestStatus.running) notify("Control bridge is online and ready");
       else notify("Control bridge installed, but WOLFHQ could not reach it yet. Check the FiveM console for wolfhq-control.");
     } catch (error) {
       notify(error.message);

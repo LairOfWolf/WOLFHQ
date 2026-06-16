@@ -845,6 +845,33 @@ print('[WOLFHQ] Desktop control bridge ready.')
   return { manifest, serverScript };
 }
 
+const CONTROL_BRIDGE_ACES = [
+  "add_ace resource.wolfhq-control command.quit allow",
+  "add_ace resource.wolfhq-control command.restart allow",
+  "add_ace resource.wolfhq-control command.start allow",
+  "add_ace resource.wolfhq-control command.stop allow",
+  "add_ace resource.wolfhq-control command.ensure allow"
+];
+
+function patchControlBridgeConfig(serverCfg) {
+  const missingAces = CONTROL_BRIDGE_ACES.filter((line) => {
+    const [, principal, object] = line.split(/\s+/);
+    return !new RegExp(`^\\s*add_ace\\s+${principal.replace(".", "\\.")}\\s+${object.replace(".", "\\.")}\\s+allow\\s*$`, "im").test(serverCfg);
+  });
+  const ensureLines = [];
+  if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
+  if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
+  if (!missingAces.length && !ensureLines.length) return { content: serverCfg, changed: false };
+
+  const prefix = missingAces.length
+    ? `# WOLFHQ desktop command bridge permissions\n${missingAces.join("\n")}\n\n`
+    : "";
+  const suffix = ensureLines.length
+    ? `${serverCfg.endsWith("\n") ? "" : "\n"}\n# WOLFHQ desktop command bridge\n${ensureLines.join("\n")}\n`
+    : "";
+  return { content: `${prefix}${serverCfg}${suffix}`, changed: true };
+}
+
 async function installControlBridge() {
   if (activeMode === "remote") {
     const files = controlBridgeFiles();
@@ -874,20 +901,8 @@ async function installControlBridge() {
   await fs.writeFile(path.join(paths.resourceRoot, "server.lua"), serverScript, "utf8");
 
   const serverCfg = await fs.readFile(paths.configPath, "utf8");
-  const ensureLines = [];
-  if (!/^\s*add_ace\s+resource\.wolfhq-control\s+command(?:\s|\.|\*)/im.test(serverCfg)) {
-    ensureLines.push("add_ace resource.wolfhq-control command allow");
-  }
-  if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
-  if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
-  if (ensureLines.length) {
-    const suffix = serverCfg.endsWith("\n") ? "" : "\n";
-    await fs.writeFile(
-      paths.configPath,
-      `${serverCfg}${suffix}\n# WOLFHQ desktop command bridge\n${ensureLines.join("\n")}\n`,
-      "utf8"
-    );
-  }
+  const patchedConfig = patchControlBridgeConfig(serverCfg);
+  if (patchedConfig.changed) await fs.writeFile(paths.configPath, patchedConfig.content, "utf8");
   activeProject = await scanDirectory(activeRoot);
   activeProject.mode = "local";
   try {
