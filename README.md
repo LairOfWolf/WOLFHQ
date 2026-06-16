@@ -47,11 +47,28 @@ WOLFHQ control bridge are accessed through an encrypted SSH tunnel.
 
 ## Run
 
+You can use WOLFHQ in either of these ways:
+
+- **Windows installer:** download `WOLFHQ-Setup-<version>-x64.exe` from the
+  GitHub Releases page and run it. The installer lets you choose the install
+  folder, creates shortcuts, and uses the WOLFHQ icon and Wolf Studios Inc.
+  application metadata.
+- **Source install:** clone or download the source code, then run the commands
+  below.
+
 ```powershell
 npm install
 npm run build
 npm start
 ```
+
+## Windows executable
+
+The Windows installer is built with Electron Builder / NSIS. It is intentionally
+not packed with obfuscators or suspicious wrappers, and it includes WOLFHQ
+publisher/product metadata to reduce common antivirus false positives. For the
+best Windows trust reputation, sign release installers with a real code-signing
+certificate before public distribution.
 
 ## GitHub updater
 
@@ -71,8 +88,10 @@ git tag v2.1.2
 git push origin main --tags
 ```
 
-GitHub Actions builds the Windows installer and zip, attaches them to the
-release, and WOLFHQ downloads the newest installer asset from that release.
+GitHub Actions builds the Windows installer, attaches it to the release, and
+WOLFHQ downloads the newest installer asset from that release. GitHub also
+provides automatic source-code archives on every release for people who prefer
+to run from source.
 
 ## License and attribution
 

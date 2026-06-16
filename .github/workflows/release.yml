@@ -43,7 +43,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            release/WOLFHQ Setup *.exe
+            release/WOLFHQ-Setup-*.exe
             release/latest.yml
             release/*.blockmap
         env:

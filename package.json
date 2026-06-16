@@ -1,6 +1,6 @@
 {
   "name": "wolfhq-fivem-command-center",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "WOLFHQ local-first command center for FiveM server projects.",
   "productName": "WOLFHQ",
   "author": "Neko Wolf Dev",
@@ -38,6 +38,9 @@
   "build": {
     "appId": "com.wolfstudios.wolfhq",
     "productName": "WOLFHQ",
+    "executableName": "WOLFHQ",
+    "artifactName": "WOLFHQ-Setup-${version}-${arch}.${ext}",
+    "copyright": "Copyright © 2026 Wolf Studios Inc. Developed by Neko Wolf Dev.",
     "npmRebuild": false,
     "files": [
       "dist/**/*",
@@ -52,7 +55,8 @@
     },
     "win": {
       "icon": "build/icon.ico",
-      "signAndEditExecutable": false,
+      "legalTrademarks": "WOLFHQ is developed by Neko Wolf Dev.",
+      "signAndEditExecutable": true,
       "signExecutable": false,
       "forceCodeSigning": false,
       "target": [
@@ -62,6 +66,12 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "shortcutName": "WOLFHQ",
+      "displayLanguageSelector": false,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true
