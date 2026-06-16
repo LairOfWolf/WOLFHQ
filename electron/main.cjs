@@ -204,7 +204,7 @@ async function fetchJson(url, settings) {
   });
   const data = await response.json().catch(() => ({}));
   if (response.status === 404 && !settings.encryptedToken) {
-    throw new Error("GitHub could not see that private repo. Add a private repo token in Settings, then save the updater channel.");
+    throw new Error("GitHub could not see LairOfWolf/WOLFHQ. Make the repo public so WOLFHQ can check releases without a token.");
   }
   if (!response.ok) throw new Error(data.message || `GitHub returned HTTP ${response.status}.`);
   return data;
@@ -222,7 +222,7 @@ async function checkForGithubUpdate(input = {}) {
     data = await fetchJson(apiUrl, settings);
   } catch (error) {
     if (!settings.encryptedToken && /404|not found/i.test(error.message)) {
-      throw new Error("GitHub could not see that private repo. Add a private repo token in Settings, then save the updater channel.");
+      throw new Error("GitHub could not see LairOfWolf/WOLFHQ. Make the repo public so WOLFHQ can check releases without a token.");
     }
     throw error;
   }
