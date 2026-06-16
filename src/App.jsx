@@ -60,7 +60,7 @@ const api = window.neonCore || {
   searchAiFiles: async () => ({ indexedFiles: 0, results: [] }),
   proposeAiChanges: async () => ({ summary: "", indexedFiles: 0, contextFiles: 0, files: [] }),
   applyAiChanges: async () => null,
-  getUpdaterSettings: async () => ({ repo: "", checkOnStartup: true, includePrerelease: false }),
+  getUpdaterSettings: async () => ({ repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false, hasToken: false }),
   saveUpdaterSettings: async (input) => input,
   checkForUpdate: async () => ({ available: false, currentVersion: "2.1.0", latestVersion: "2.1.0", assets: [] }),
   downloadUpdate: async () => null,
@@ -298,11 +298,11 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState([]);
   const [aiBusy, setAiBusy] = useState(false);
   const [updater, setUpdater] = useState({
-    settings: { repo: "", checkOnStartup: true, includePrerelease: false },
+    settings: { repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false, token: "", hasToken: false },
     latest: null,
     checking: false,
     downloading: false,
-    status: "Add your GitHub owner/repo in Settings to enable updates."
+    status: "Linked to LairOfWolf/WOLFHQ. Add a GitHub token for private releases."
   });
   const [resourceDraft, setResourceDraft] = useState({
     name: "wolfhq-custom", description: "Custom gameplay resource", author: "WOLFHQ",
@@ -336,7 +336,7 @@ export default function App() {
     let cancelled = false;
     api.getUpdaterSettings().then(async (settings) => {
       if (cancelled) return;
-      setUpdater((current) => ({ ...current, settings }));
+      setUpdater((current) => ({ ...current, settings: { ...current.settings, ...settings, token: "" } }));
       if (!settings.repo) {
         setUpdater((current) => ({ ...current, status: "Add your GitHub owner/repo in Settings to enable updates." }));
         return;
@@ -905,7 +905,7 @@ export default function App() {
   async function saveUpdaterSettings() {
     try {
       const settings = await api.saveUpdaterSettings(updater.settings);
-      setUpdater((current) => ({ ...current, settings, status: `Linked to GitHub releases: ${settings.repo}` }));
+      setUpdater((current) => ({ ...current, settings: { ...current.settings, ...settings, token: "" }, status: `Linked to GitHub releases: ${settings.repo}` }));
       notify("Updater GitHub channel saved");
     } catch (error) {
       notify(error.message);
@@ -1841,8 +1841,10 @@ export default function App() {
                   <div className="settings-card updater-card panel-corners">
                     <div className="settings-title"><Download size={18} /><span><strong>GITHUB AUTO-UPDATER</strong><small>Checks your GitHub Releases channel and downloads the latest installer asset.</small></span></div>
                     <label>GitHub release repo<input placeholder="owner/repo or https://github.com/owner/repo" value={updater.settings.repo} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, repo: event.target.value } }))} /></label>
+                    <label>Private repo token<input type="password" placeholder={updater.settings.hasToken ? "Encrypted token saved - leave blank to keep it" : "GitHub fine-grained token for private releases"} value={updater.settings.token || ""} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, token: event.target.value } }))} /></label>
                     <label className="ops-check"><input type="checkbox" checked={Boolean(updater.settings.checkOnStartup)} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, checkOnStartup: event.target.checked } }))} /> Check for updates when WOLFHQ starts</label>
                     <label className="ops-check"><input type="checkbox" checked={Boolean(updater.settings.includePrerelease)} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, includePrerelease: event.target.checked } }))} /> Include pre-release builds</label>
+                    <div className="updater-hint"><LockKeyhole size={13} /> Private GitHub repos need a token with read-only Contents access. WOLFHQ encrypts it on this PC.</div>
                     <div className={`updater-state ${updater.latest?.available ? "available" : ""}`}>
                       <Circle size={8} fill="currentColor" />
                       <span>{updater.status}</span>

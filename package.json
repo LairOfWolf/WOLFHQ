@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "build": "vite build",
+    "package:win": "npm run build && electron-builder --win nsis zip --x64",
+    "release:win": "npm run build && electron-builder --win nsis zip --x64 --publish always",
     "start": "electron .",
     "check": "vite build",
     "test": "node --test tests/*.test.cjs"
@@ -28,14 +30,43 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "vite": "^6.0.11",
     "wait-on": "^8.0.1"
   },
   "build": {
     "appId": "com.wolfstudios.wolfhq",
     "productName": "WOLFHQ",
+    "npmRebuild": false,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "build/icon.ico",
+      "build/icon.png",
+      "public/assets/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
     "win": {
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "LairOfWolf",
+      "repo": "WOLFHQ",
+      "private": true
     }
   }
 }

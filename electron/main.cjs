@@ -23,7 +23,8 @@ const MAX_SCAN_ENTRIES = 60000;
 const DEFAULT_UPDATER_SETTINGS = {
   repo: "",
   checkOnStartup: true,
-  includePrerelease: false
+  includePrerelease: false,
+  encryptedToken: ""
 };
 
 let mainWindow;
@@ -117,27 +118,36 @@ function normalizeGitHubRepo(value) {
   return `${match[1]}/${match[2]}`;
 }
 
-function normalizeUpdaterSettings(input = {}) {
+function normalizeUpdaterSettings(input = {}, current = {}) {
   const repo = normalizeGitHubRepo(input.repo);
   return {
     repo,
     checkOnStartup: input.checkOnStartup !== false,
-    includePrerelease: Boolean(input.includePrerelease)
+    includePrerelease: Boolean(input.includePrerelease),
+    encryptedToken: current.encryptedToken || ""
   };
 }
 
 async function readUpdaterSettings() {
   try {
-    return normalizeUpdaterSettings(JSON.parse(await fs.readFile(updaterSettingsPath(), "utf8")));
+    const saved = JSON.parse(await fs.readFile(updaterSettingsPath(), "utf8"));
+    return normalizeUpdaterSettings(saved, saved);
   } catch {
     return { ...DEFAULT_UPDATER_SETTINGS };
   }
 }
 
+function publicUpdaterSettings(settings) {
+  const { encryptedToken, ...safe } = settings;
+  return { ...safe, hasToken: Boolean(encryptedToken) };
+}
+
 async function saveUpdaterSettings(input) {
-  const settings = normalizeUpdaterSettings(input);
+  const current = await readUpdaterSettings();
+  const settings = normalizeUpdaterSettings(input, current);
+  if (input.token) settings.encryptedToken = encryptSecret(String(input.token).trim());
   await fs.writeFile(updaterSettingsPath(), JSON.stringify(settings, null, 2), "utf8");
-  return settings;
+  return publicUpdaterSettings(settings);
 }
 
 function parseVersion(value) {
@@ -172,17 +182,25 @@ function releaseSummary(release, repo) {
     assets: (release.assets || []).map((asset) => ({
       name: asset.name,
       size: asset.size || 0,
-      url: asset.browser_download_url
+      url: asset.browser_download_url,
+      apiUrl: asset.url
     })).filter((asset) => asset.url)
   };
 }
 
-async function fetchJson(url) {
+function updaterAuthHeaders(settings, accept = "application/vnd.github+json") {
+  const headers = {
+    "Accept": accept,
+    "User-Agent": `WOLFHQ/${app.getVersion()}`
+  };
+  const token = settings.encryptedToken ? decryptSecret(settings.encryptedToken) : "";
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+async function fetchJson(url, settings) {
   const response = await fetch(url, {
-    headers: {
-      "Accept": "application/vnd.github+json",
-      "User-Agent": `WOLFHQ/${app.getVersion()}`
-    }
+    headers: updaterAuthHeaders(settings)
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || `GitHub returned HTTP ${response.status}.`);
@@ -190,12 +208,13 @@ async function fetchJson(url) {
 }
 
 async function checkForGithubUpdate(input = {}) {
-  const settings = normalizeUpdaterSettings(input.repo ? input : await readUpdaterSettings());
+  const current = await readUpdaterSettings();
+  const settings = input.repo ? normalizeUpdaterSettings(input, current) : current;
   if (!settings.repo) throw new Error("Add your GitHub owner/repo in Settings before checking for WOLFHQ updates.");
   const apiUrl = settings.includePrerelease
     ? `https://api.github.com/repos/${settings.repo}/releases?per_page=10`
     : `https://api.github.com/repos/${settings.repo}/releases/latest`;
-  const data = await fetchJson(apiUrl);
+  const data = await fetchJson(apiUrl, settings);
   const release = Array.isArray(data)
     ? data.find((item) => !item.draft && (settings.includePrerelease || !item.prerelease))
     : data;
@@ -215,14 +234,18 @@ function pickReleaseAsset(release) {
 }
 
 async function downloadGithubUpdate(input = {}) {
-  const latest = await checkForGithubUpdate(input);
+  const current = await readUpdaterSettings();
+  const settings = input.repo ? normalizeUpdaterSettings(input, current) : current;
+  const latest = await checkForGithubUpdate(settings);
   const asset = pickReleaseAsset(latest);
   if (!asset?.url) {
     await shell.openExternal(latest.releaseUrl);
     return { ...latest, downloaded: false, message: "No release asset was found, so WOLFHQ opened the GitHub release page." };
   }
 
-  const response = await fetch(asset.url, { headers: { "User-Agent": `WOLFHQ/${app.getVersion()}` } });
+  const response = await fetch(asset.apiUrl || asset.url, {
+    headers: updaterAuthHeaders(settings, asset.apiUrl ? "application/octet-stream" : "application/vnd.github+json")
+  });
   if (!response.ok) throw new Error(`Update download failed with HTTP ${response.status}.`);
   const bytes = Buffer.from(await response.arrayBuffer());
   const safeName = asset.name.replace(/[<>:"/\\|?*]/g, "_");
@@ -1291,7 +1314,7 @@ ipcMain.handle("ai:apply", async (_event, changes) => {
   return getAiManager().apply(changes);
 });
 
-ipcMain.handle("updater:settings", () => readUpdaterSettings());
+ipcMain.handle("updater:settings", async () => publicUpdaterSettings(await readUpdaterSettings()));
 ipcMain.handle("updater:save-settings", (_event, input) => saveUpdaterSettings(input || {}));
 ipcMain.handle("updater:check", (_event, input) => checkForGithubUpdate(input || {}));
 ipcMain.handle("updater:download", (_event, input) => downloadGithubUpdate(input || {}));
