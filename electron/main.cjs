@@ -203,6 +203,9 @@ async function fetchJson(url, settings) {
     headers: updaterAuthHeaders(settings)
   });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 404 && !settings.encryptedToken) {
+    throw new Error("GitHub could not see that private repo. Add a private repo token in Settings, then save the updater channel.");
+  }
   if (!response.ok) throw new Error(data.message || `GitHub returned HTTP ${response.status}.`);
   return data;
 }
