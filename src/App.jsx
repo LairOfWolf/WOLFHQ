@@ -294,6 +294,7 @@ export default function App() {
   const [antiCheatDisplay, setAntiCheatDisplay] = useState("Overview");
   const [antiCheatProfile, setAntiCheatProfile] = useState("Balanced");
   const [playerDetails, setPlayerDetails] = useState([]);
+  const [playerModal, setPlayerModal] = useState(null);
   const [consoleCommand, setConsoleCommand] = useState("");
   const [consoleFilter, setConsoleFilter] = useState("");
   const [opsData, setOpsData] = useState({ metrics: [], notes: {}, playerHistory: [], audit: [], accounts: [], current: null, settings: {} });
@@ -851,13 +852,45 @@ export default function App() {
     }
   }
 
-  async function administerPlayer(player, action) {
-    const reason = window.prompt(`${action === "ban" ? "Ban" : "Kick"} reason for ${player.name}:`, "WOLFHQ administration");
-    if (reason === null) return;
-    if (action === "ban" && !window.confirm(`Ban ${player.name} using their current identifiers?`)) return;
+  function openPlayerAction(player, action) {
+    setPlayerModal({
+      type: action,
+      player,
+      reason: action === "ban" ? "Banned by WOLFHQ administration" : "Kicked by WOLFHQ administration",
+      confirmed: action !== "ban"
+    });
+  }
+
+  function openPlayerNote(player) {
+    const key = player.identifiers?.[0] || `${player.name}:${player.id}`;
+    setPlayerModal({
+      type: "note",
+      player,
+      key,
+      note: opsData.notes?.[key] || player.note || ""
+    });
+  }
+
+  async function submitPlayerAction(event) {
+    event.preventDefault();
+    if (!playerModal?.player || !["kick", "ban"].includes(playerModal.type)) return;
+    if (playerModal.type === "ban" && !playerModal.confirmed) {
+      notify("Tick the ban confirmation before sending it");
+      return;
+    }
     try {
-      await api.playerAction(endpoint, { id: player.id, name: player.name, identifiers: player.identifiers || [], action, reason });
-      notify(`${player.name} ${action === "ban" ? "banned" : "kicked"}`);
+      const control = await api.getControlStatus(endpoint);
+      if (!control.running) throw new Error("Install or repair the WOLFHQ control bridge first, then restart or repair wolfhq-control.");
+      const player = playerModal.player;
+      await api.playerAction(endpoint, {
+        id: player.id,
+        name: player.name,
+        identifiers: player.identifiers || [],
+        action: playerModal.type,
+        reason: playerModal.reason
+      });
+      notify(`${player.name} ${playerModal.type === "ban" ? "banned" : "kicked"}`);
+      setPlayerModal(null);
       setPlayerDetails(await api.getPlayerDetails(endpoint));
       setOpsData(await api.getOpsDashboard());
     } catch (error) {
@@ -865,13 +898,15 @@ export default function App() {
     }
   }
 
-  async function editPlayerNote(player) {
-    const key = player.identifiers?.[0] || `${player.name}:${player.id}`;
-    const note = window.prompt(`Private WOLFHQ note for ${player.name}:`, opsData.notes?.[key] || "");
-    if (note === null) return;
+  async function submitPlayerNote(event) {
+    event.preventDefault();
+    if (!playerModal?.player || playerModal.type !== "note") return;
     try {
-      await api.savePlayerNote(key, note);
-      setOpsData(await api.getOpsDashboard());
+      await api.savePlayerNote(playerModal.key, playerModal.note);
+      const [players, dashboard] = await Promise.all([api.getPlayerDetails(endpoint), api.getOpsDashboard()]);
+      setPlayerDetails(players);
+      setOpsData(dashboard);
+      setPlayerModal(null);
       notify("Player note saved");
     } catch (error) {
       notify(error.message);
@@ -1702,9 +1737,9 @@ export default function App() {
                             <div className="player-ban-clear"><ShieldCheck size={14} /><span>No matching WOLFHQ ban record for this identifier.</span></div>
                           )}
                           <div className="player-actions">
-                            <button onClick={() => editPlayerNote(player)}><FileCode2 size={13} /> NOTE</button>
-                            <button onClick={() => administerPlayer(player, "kick")}><UserX size={13} /> KICK</button>
-                            <button className="danger" onClick={() => administerPlayer(player, "ban")}><Ban size={13} /> BAN</button>
+                            <button onClick={() => openPlayerNote(player)}><FileCode2 size={13} /> NOTE</button>
+                            <button onClick={() => openPlayerAction(player, "kick")}><UserX size={13} /> KICK</button>
+                            <button className="danger" onClick={() => openPlayerAction(player, "ban")}><Ban size={13} /> BAN</button>
                           </div>
                         </article>
                       ))}
@@ -1725,6 +1760,11 @@ export default function App() {
                           <div key={`${ban.createdAt}-${index}`}><strong>{ban.name || ban.playerName || "Unknown"}</strong><small>{ban.reason || "No reason supplied"}</small><em>{ban.createdAt ? new Date(ban.createdAt).toLocaleString() : "unknown time"}</em></div>
                         ))}
                         {!recentPlayerBans.length && <p>No matching WOLFHQ bans for the currently connected identifiers.</p>}
+                      </div>
+                      <div className="player-side-card global-intel">
+                        <span><Globe2 size={16} /> GLOBAL BAN INTEL</span>
+                        <div><strong>PROVIDER READY</strong><small>FiveM has no public universal ban database. WOLFHQ can only detect external bans when an anti-cheat or reputation provider exposes an API/key.</small></div>
+                        <div><strong>ANTI-CHEAT SOURCE</strong><small>Future adapters can label bans by provider, for example Neko Anti-Cheat, txAdmin exports, or a paid anti-cheat API.</small></div>
                       </div>
                     </aside>
                         </div>
@@ -2150,6 +2190,32 @@ export default function App() {
             </div>
             <div className="restart-confirm"><Clock size={15} /> Restart scheduled after confirmation. This cannot be canceled from WOLFHQ.</div>
             <button className="primary-action form-submit danger-submit" type="submit"><RotateCcw size={16} /> CONFIRM SERVER RESTART</button>
+          </form>
+        </Modal>
+      )}
+      {playerModal?.type === "note" && (
+        <Modal title="PLAYER NOTE" onClose={() => setPlayerModal(null)}>
+          <form className="resource-form player-action-form" onSubmit={submitPlayerNote}>
+            <div className="control-notice"><FileCode2 size={17} /><span>Save a private WOLFHQ note for {playerModal.player?.name}. This stays on this PC and does not require the control bridge.</span></div>
+            <label>Player<input readOnly value={`${playerModal.player?.name || "Unknown"} // #${playerModal.player?.id ?? "--"}`} /></label>
+            <label>Note<textarea autoFocus value={playerModal.note} onChange={(event) => setPlayerModal({ ...playerModal, note: event.target.value })} /></label>
+            <button className="primary-action form-submit" type="submit"><Save size={16} /> SAVE PLAYER NOTE</button>
+          </form>
+        </Modal>
+      )}
+      {["kick", "ban"].includes(playerModal?.type) && (
+        <Modal title={playerModal.type === "ban" ? "BAN PLAYER" : "KICK PLAYER"} onClose={() => setPlayerModal(null)}>
+          <form className="resource-form player-action-form" onSubmit={submitPlayerAction}>
+            <div className={`control-notice ${playerModal.type === "ban" ? "danger" : ""}`}>
+              {playerModal.type === "ban" ? <Ban size={17} /> : <UserX size={17} />}
+              <span>{playerModal.type === "ban" ? "This drops the player and stores their current identifiers in the WOLFHQ bridge ban file." : "This drops the player from the live server through the WOLFHQ control bridge."}</span>
+            </div>
+            <label>Player<input readOnly value={`${playerModal.player?.name || "Unknown"} // #${playerModal.player?.id ?? "--"}`} /></label>
+            <label>Reason<textarea autoFocus value={playerModal.reason} onChange={(event) => setPlayerModal({ ...playerModal, reason: event.target.value })} /></label>
+            {playerModal.type === "ban" && <label className="remember-secret action-confirm"><input type="checkbox" checked={Boolean(playerModal.confirmed)} onChange={(event) => setPlayerModal({ ...playerModal, confirmed: event.target.checked })} /><span /> Confirm ban using this player's current identifiers</label>}
+            <button className={`primary-action form-submit ${playerModal.type === "ban" ? "danger-submit" : ""}`} type="submit" disabled={playerModal.type === "ban" && !playerModal.confirmed}>
+              {playerModal.type === "ban" ? <Ban size={16} /> : <UserX size={16} />} {playerModal.type === "ban" ? "CONFIRM BAN" : "KICK PLAYER"}
+            </button>
           </form>
         </Modal>
       )}
