@@ -3,7 +3,8 @@
   "version": "2.1.3",
   "description": "WOLFHQ local-first command center for FiveM server projects.",
   "productName": "WOLFHQ",
-  "author": "Wolf Studios Inc.",
+  "author": "Neko Wolf Dev",
+  "license": "MIT",
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {

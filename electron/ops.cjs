@@ -413,14 +413,20 @@ class OpsManager {
 
   async databaseUpdate(config, input) {
     await this.assertPermission("database");
-    for (const value of [input.table, input.keyColumn, input.column]) {
+    const where = Array.isArray(input.where) && input.where.length
+      ? input.where
+      : [{ column: input.keyColumn, value: input.keyValue }];
+    for (const value of [input.table, input.column, ...where.map((item) => item.column)]) {
       if (!/^[a-zA-Z0-9_]+$/.test(value)) throw new Error("Invalid database identifier.");
     }
+    if (!where.length) throw new Error("No database row identifier was provided.");
+    const setValue = input.valueIsNull ? null : input.value;
+    const whereSql = where.map((item) => `\`${item.column}\` <=> ?`).join(" AND ");
     const { connection } = await this.databaseConnect(config);
     try {
       const [result] = await connection.execute(
-        `UPDATE \`${input.table}\` SET \`${input.column}\` = ? WHERE \`${input.keyColumn}\` = ? LIMIT 1`,
-        [input.value, input.keyValue]
+        `UPDATE \`${input.table}\` SET \`${input.column}\` = ? WHERE ${whereSql} LIMIT 1`,
+        [setValue, ...where.map((item) => item.value)]
       );
       await this.audit("database.update", { table: input.table, column: input.column });
       return { ok: true, affectedRows: result.affectedRows };

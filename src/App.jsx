@@ -7,7 +7,7 @@ import {
   Clock, Cloud, Code2, Cpu, Database, Download, ExternalLink, File, FileCode2, FileJson, Folder, FolderOpen, Gauge,
   Eye, Fingerprint, GitBranch, Globe2, HardDrive, History, KeyRound, Layers3, LockKeyhole, Maximize2, Minimize2, Network,
   PackageCheck, Play, Plus, RefreshCw, RotateCcw, Save, Search, Send, Server, Settings2, ShieldCheck, Sparkles,
-  ShieldAlert, Square, Terminal, Trash2, UserCog, UserX, Users, Wifi, X, Zap
+  ShieldAlert, Square, Terminal, Trash2, UploadCloud, UserCog, UserX, Users, Wifi, X, Zap
 } from "lucide-react";
 
 const api = window.neonCore || {
@@ -23,6 +23,8 @@ const api = window.neonCore || {
   saveFile: async () => null,
   createResource: async () => null,
   deleteResource: async () => null,
+  deleteFolder: async () => null,
+  uploadFolder: async () => null,
   createFile: async () => null,
   getServerStatus: async () => EMPTY_STATUS,
   getServerLogs: async () => ({ path: "", lines: [] }),
@@ -157,6 +159,25 @@ function TreeNode({ node, depth = 0, filter, onOpen, selectedPath }) {
   );
 }
 
+function collectFolders(nodes = [], rootPath = "") {
+  const folders = [];
+  const walk = (node, depth) => {
+    if (node.type !== "folder") return;
+    const children = node.children || [];
+    const relativePath = node.relativePath || node.path.replace(rootPath, "").replace(/^[\\/]/, "") || node.name;
+    folders.push({
+      ...node,
+      depth,
+      relativePath,
+      fileCount: children.filter((child) => child.type === "file").length,
+      folderCount: children.filter((child) => child.type === "folder").length
+    });
+    children.forEach((child) => walk(child, depth + 1));
+  };
+  nodes.forEach((node) => walk(node, 0));
+  return folders;
+}
+
 function MetricCard({ icon: Icon, label, value, detail, color = "cyan" }) {
   return (
     <div className={`metric-card ${color}`}>
@@ -263,6 +284,7 @@ export default function App() {
   const [restartDraft, setRestartDraft] = useState({ delay: 15, reason: "Scheduled maintenance" });
   const [resourceStates, setResourceStates] = useState([]);
   const [resourceSearch, setResourceSearch] = useState("");
+  const [folderSearch, setFolderSearch] = useState("");
   const [resourceCatalog, setResourceCatalog] = useState([]);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogFramework, setCatalogFramework] = useState("Detected");
@@ -683,8 +705,15 @@ export default function App() {
     try {
       const result = await api.installControlBridge();
       await rescan();
-      await refreshControlStatus(endpoint);
-      notify(result.requiresServerRestart ? "Control bridge installed. Restart the server once to activate it." : "Control bridge ready");
+      let latestStatus = await api.getControlStatus(endpoint);
+      for (let attempt = 0; !latestStatus.running && attempt < 3; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        latestStatus = await api.getControlStatus(endpoint);
+      }
+      setControlStatus(latestStatus);
+      if (latestStatus.running) notify("Control bridge is online and ready");
+      else if (result.requiresServerRestart) notify("Control bridge files and ensure lines are installed. Restart FXServer once, then WOLFHQ will reconnect.");
+      else notify("Control bridge installed, but WOLFHQ could not reach it yet. Check the FiveM console for wolfhq-control.");
     } catch (error) {
       notify(error.message);
     } finally {
@@ -747,6 +776,42 @@ export default function App() {
       setProject(result.project || await api.scanProject(project.rootPath));
       setResourceStates(await api.getResourceStates(endpoint));
       notify(`${resource.name} deleted after backup`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadServerFolder(destinationPath = project.rootPath) {
+    setBusy(true);
+    try {
+      const result = await api.uploadFolder(destinationPath);
+      if (!result) return;
+      setProject(result.project || await api.scanProject(project.rootPath));
+      notify(`${result.name} uploaded`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteServerFolder(folder) {
+    const typed = window.prompt(`This deletes the entire "${folder.name}" folder and all files inside it after creating a restore point.\n\nType ${folder.name} to confirm:`);
+    if (typed === null) return;
+    if (typed.trim() !== folder.name) {
+      notify("Folder delete canceled");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.deleteFolder(folder.path);
+      const separator = isRemote ? "/" : "\\";
+      setTabs((current) => current.filter((tab) => tab.path !== folder.path && !tab.path.startsWith(`${folder.path}${separator}`)));
+      if (activePath === folder.path || activePath.startsWith(`${folder.path}${separator}`)) setActivePath("");
+      setProject(result.project || await api.scanProject(project.rootPath));
+      notify(`${folder.name} deleted after backup`);
     } catch (error) {
       notify(error.message);
     } finally {
@@ -869,20 +934,24 @@ export default function App() {
   }
 
   async function editDatabaseCell(row, column) {
-    const keyColumn = dbRows.columns.find((item) => item.Key === "PRI")?.Field || dbRows.columns[0]?.Field;
-    if (!keyColumn) return;
-    const value = window.prompt(`New value for ${column}:`, row[column] == null ? "" : String(row[column]));
+    const primaryKey = dbRows.columns.find((item) => item.Key === "PRI")?.Field;
+    const where = primaryKey
+      ? [{ column: primaryKey, value: row[primaryKey] }]
+      : dbRows.columns.map((item) => ({ column: item.Field, value: row[item.Field] }));
+    if (!where.length) return;
+    const currentValue = row[column] == null ? "NULL" : String(row[column]);
+    const value = window.prompt(`New value for ${column}:\n\nType NULL to save a database null value.`, currentValue);
     if (value === null) return;
     try {
-      await api.databaseUpdate(dbConfig, {
+      const result = await api.databaseUpdate(dbConfig, {
         table: dbTable,
-        keyColumn,
-        keyValue: row[keyColumn],
         column,
-        value
+        value: value.trim().toUpperCase() === "NULL" ? null : value,
+        valueIsNull: value.trim().toUpperCase() === "NULL",
+        where
       });
       setDbRows(await api.databaseRows(dbConfig, dbTable));
-      notify(`${dbTable}.${column} updated`);
+      notify(result?.affectedRows ? `${dbTable}.${column} saved` : `${dbTable}.${column} was already up to date`);
     } catch (error) {
       notify(error.message);
     }
@@ -1088,6 +1157,12 @@ export default function App() {
       return `${resource.name} ${resource.path} ${state}`.toLowerCase().includes(query);
     });
   }, [project?.resources, resourceSearch, resourceStateMap]);
+  const visibleFolders = useMemo(() => {
+    const folders = collectFolders(project?.tree || [], project?.rootPath || "");
+    const query = folderSearch.trim().toLowerCase();
+    if (!query) return folders;
+    return folders.filter((folder) => `${folder.name} ${folder.relativePath} ${folder.path}`.toLowerCase().includes(query));
+  }, [project?.tree, project?.rootPath, folderSearch]);
   const visibleLogs = useMemo(() => logs.lines.filter((line) => !consoleFilter || line.toLowerCase().includes(consoleFilter.toLowerCase())), [logs.lines, consoleFilter]);
   const focusedView = Boolean(project && activeView !== "project");
   const detectedCatalogFramework = useMemo(() => {
@@ -1152,6 +1227,7 @@ export default function App() {
         <aside className="rail">
           <button className={`rail-button project-rail ${activeView === "project" ? "active" : ""}`} title="Project" onClick={() => setActiveView("project")}><Layers3 size={19} /><span>Project</span></button>
           <button className={`rail-button resources-rail ${activeView === "resources" ? "active" : ""}`} title="Resources" onClick={() => setActiveView("resources")}><Box size={19} /><span>Resources</span></button>
+          <button className={`rail-button folders-rail ${activeView === "folders" ? "active" : ""}`} title="Server Folders" onClick={() => setActiveView("folders")}><FolderOpen size={19} /><span>Folders</span></button>
           <button className={`rail-button hub-rail ${activeView === "resourceHub" ? "active" : ""}`} title="Official Resource Hub" onClick={() => setActiveView("resourceHub")}><Download size={19} /><span>Hub</span></button>
           <button className={`rail-button anticheat-rail ${activeView === "antiCheat" ? "active" : ""}`} title="Neko Anti-Cheat" onClick={() => setActiveView("antiCheat")}><ShieldAlert size={19} /><span>Neko AC</span></button>
           <button className={`rail-button players-rail ${activeView === "players" ? "active" : ""}`} title="Players" onClick={() => setActiveView("players")}><Users size={19} /><span>Players</span></button>
@@ -1373,6 +1449,37 @@ export default function App() {
                       </div>
                     ))}
                     {!visibleResources.length && <div className="resource-empty"><Search size={34} /><strong>NO MATCHING RESOURCES</strong><p>Try another resource name, path, or state.</p></div>}
+                  </div>
+                </section>
+              )}
+
+              {activeView === "folders" && (
+                <section className="command-page folder-page panel-corners">
+                  <div className="command-page-head">
+                    <div><FolderOpen size={20} /><span><strong>SERVER FOLDER MATRIX</strong><small>Every indexed folder inside the active server root, with upload and guarded delete controls</small></span></div>
+                    <div className="resource-page-tools">
+                      <label><Search size={13} /><input placeholder="Search folders..." value={folderSearch} onChange={(event) => setFolderSearch(event.target.value)} /></label>
+                      <button onClick={() => uploadServerFolder(project.rootPath)} disabled={busy}><UploadCloud size={13} /> UPLOAD TO ROOT</button>
+                      <strong>{visibleFolders.length}/{project.stats.folders} FOLDERS</strong>
+                    </div>
+                  </div>
+                  <div className="folder-grid">
+                    {visibleFolders.map((folder, index) => (
+                      <article key={folder.path} className="folder-card">
+                        <span>{String(index + 1).padStart(3, "0")}</span>
+                        <FolderOpen size={20} />
+                        <div>
+                          <strong>{folder.name}</strong>
+                          <small>{folder.relativePath}</small>
+                          <i>{folder.folderCount} folders // {folder.fileCount} files</i>
+                        </div>
+                        <div className="folder-card-actions">
+                          <button title="Upload a folder here" onClick={() => uploadServerFolder(folder.path)} disabled={busy}><UploadCloud size={13} /> UPLOAD</button>
+                          <button className="danger" title="Delete this folder" onClick={() => deleteServerFolder(folder)} disabled={busy}><Trash2 size={13} /> DELETE</button>
+                        </div>
+                      </article>
+                    ))}
+                    {!visibleFolders.length && <div className="resource-empty"><FolderOpen size={34} /><strong>NO MATCHING FOLDERS</strong><p>Try another folder name or path.</p></div>}
                   </div>
                 </section>
               )}
@@ -1650,8 +1757,8 @@ export default function App() {
                       <aside>{dbTables.map((table) => <button key={table} className={dbTable === table ? "active" : ""} onClick={() => loadDatabaseTable(table)}>{table}</button>)}</aside>
                       <div className="db-table-wrap">
                         {dbRows.rows.length ? (
-                          <table><thead><tr>{dbRows.columns.slice(0, 8).map((column) => <th key={column.Field}>{column.Field}</th>)}</tr></thead>
-                            <tbody>{dbRows.rows.slice(0, 30).map((row, rowIndex) => <tr key={rowIndex}>{dbRows.columns.slice(0, 8).map((column) => <td key={column.Field} onDoubleClick={() => editDatabaseCell(row, column.Field)} title="Double-click to edit">{row[column.Field] == null ? "NULL" : String(row[column.Field])}</td>)}</tr>)}</tbody>
+                          <table><thead><tr>{dbRows.columns.map((column) => <th key={column.Field}>{column.Field}</th>)}</tr></thead>
+                            <tbody>{dbRows.rows.slice(0, 100).map((row, rowIndex) => <tr key={rowIndex}>{dbRows.columns.map((column) => <td key={column.Field} onDoubleClick={() => editDatabaseCell(row, column.Field)} title="Double-click to edit">{row[column.Field] == null ? "NULL" : String(row[column.Field])}</td>)}</tr>)}</tbody>
                           </table>
                         ) : <div className="compact-empty">Connect and select a table. Double-click a cell to edit it safely.</div>}
                       </div>

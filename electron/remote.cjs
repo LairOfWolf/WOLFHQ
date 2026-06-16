@@ -1,6 +1,8 @@
 const { Client } = require("ssh2");
 const crypto = require("node:crypto");
+const fs = require("node:fs/promises");
 const http = require("node:http");
+const localPath = require("node:path");
 const path = require("node:path").posix;
 const { detectAntiCheats } = require("./anticheat.cjs");
 
@@ -353,6 +355,17 @@ class RemoteServer {
     });
   }
 
+  uploadFile(localFile, remoteFile) {
+    this.requireConnected();
+    const safePath = this.safePath(remoteFile);
+    return new Promise((resolve, reject) => {
+      this.sftp.fastPut(localFile, safePath, (error) => {
+        if (error) reject(error);
+        else resolve({ ok: true, path: safePath });
+      });
+    });
+  }
+
   mkdir(directory) {
     this.requireConnected();
     const safePath = this.safePath(directory);
@@ -380,6 +393,36 @@ class RemoteServer {
         }
       }
     }
+  }
+
+  async uploadFolder(sourceFolder, destinationFolder) {
+    const sourceStats = await fs.stat(sourceFolder);
+    if (!sourceStats.isDirectory()) throw new Error("Choose a folder to upload.");
+    const destination = this.safePath(destinationFolder);
+    const name = localPath.basename(sourceFolder);
+    const target = this.safePath(path.join(destination, name));
+    try {
+      await this.stat(target);
+      throw new Error(`A folder named ${name} already exists there.`);
+    } catch (error) {
+      if (error.code !== 2 && error.code !== "ENOENT" && !/no such file/i.test(error.message || "")) throw error;
+    }
+    await this.mkdirRecursive(target);
+    const uploadTree = async (localDirectory, remoteDirectory) => {
+      const entries = await fs.readdir(localDirectory, { withFileTypes: true });
+      for (const entry of entries) {
+        const localChild = localPath.join(localDirectory, entry.name);
+        const remoteChild = path.join(remoteDirectory, entry.name);
+        if (entry.isDirectory()) {
+          await this.mkdirRecursive(remoteChild);
+          await uploadTree(localChild, remoteChild);
+        } else if (entry.isFile()) {
+          await this.uploadFile(localChild, remoteChild);
+        }
+      }
+    };
+    await uploadTree(sourceFolder, target);
+    return { ok: true, name, path: target };
   }
 
   async scan() {
@@ -868,6 +911,19 @@ class RemoteServer {
     return { ok: true, name: resource.name, path: target };
   }
 
+  async deleteFolder(folderPath) {
+    const target = this.safePath(folderPath);
+    if (target === normalizeRemotePath(this.profile.rootPath)) throw new Error("The remote server root cannot be deleted.");
+    const stats = await this.stat(target);
+    if (!stats.isDirectory()) throw new Error("That remote path is not a folder.");
+    const command = this.isWindowsServer()
+      ? `powershell -NoProfile -Command "Remove-Item -LiteralPath ${powershellQuote(this.windowsShellPath(target))} -Recurse -Force"`
+      : `rm -rf -- ${shellQuote(target)}`;
+    const result = await this.exec(command, 10 * 60 * 1000);
+    if (result.code !== 0) throw new Error(result.stderr || "Remote folder deletion failed.");
+    return { ok: true, name: path.basename(target), path: target };
+  }
+
   getControlPaths() {
     if (!this.project?.config?.path) throw new Error("No remote server.cfg was detected.");
     const profileRoot = path.dirname(this.project.config.path);
@@ -898,10 +954,13 @@ class RemoteServer {
     await this.writeFile(path.join(paths.resourceRoot, "fxmanifest.lua"), manifest);
     await this.writeFile(path.join(paths.resourceRoot, "server.lua"), serverScript);
     const serverCfg = (await this.readFileRaw(paths.configPath)).toString("utf8");
-    if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) {
-      await this.writeFile(paths.configPath, `${serverCfg}${serverCfg.endsWith("\n") ? "" : "\n"}\n# WOLFHQ desktop command bridge\nensure wolfhq-control\n`);
+    const ensureLines = [];
+    if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
+    if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
+    if (ensureLines.length) {
+      await this.writeFile(paths.configPath, `${serverCfg}${serverCfg.endsWith("\n") ? "" : "\n"}\n# WOLFHQ desktop command bridge\n${ensureLines.join("\n")}\n`);
     }
-    return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true };
+    return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
   }
 
   async callControl(route, payload, method = "POST") {

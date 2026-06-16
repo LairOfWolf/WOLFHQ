@@ -2,9 +2,12 @@
 
 A local Electron desktop interface for inspecting and editing FiveM server projects.
 
+Developed by **Neko Wolf Dev** on **June 16, 2026 06:40 PDT**.
+
 ## Features
 
 - Recursive server folder indexing and searchable file tree
+- Dedicated server folder manager with search, guarded delete, and local/VPS folder upload
 - FiveM framework detection for QBCore, Qbox, ESX, vRP, and ND
 - `server.cfg` metadata extraction
 - Built-in CodeMirror editor with save tracking
@@ -26,6 +29,7 @@ A local Electron desktop interface for inspecting and editing FiveM server proje
 - Multi-server fleet profiles and encrypted remote switching
 - Git status, fast-forward deployment, and one-click rollback
 - MySQL table browsing and parameterized cell editing through SSH tunnels
+- Editable MySQL cells with primary-key matching and full-row fallback for tables without a primary key
 - Crash detection with restart commands and Discord webhook alerts
 - Owner, admin, and developer accounts with permissions and audit logging
 - Dedicated sidebar workspaces for performance, backups, fleet, Git, database,
@@ -69,3 +73,10 @@ git push origin main --tags
 
 GitHub Actions builds the Windows installer and zip, attaches them to the
 release, and WOLFHQ downloads the newest installer asset from that release.
+
+## License and attribution
+
+WOLFHQ is open source and free to use, modify, and share under the MIT License.
+You can change it for your own server, fork it, and build on top of it, but
+copies or substantial portions must keep the original copyright and license
+notice crediting **Neko Wolf Dev** as the original source.

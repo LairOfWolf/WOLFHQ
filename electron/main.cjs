@@ -406,6 +406,33 @@ function requireKnownResourcePath(resourcePath) {
   return { resource, target };
 }
 
+async function requireSafeFolderPath(folderPath, options = {}) {
+  if (!activeProject) throw new Error("Connect a server first.");
+  const target = requireSafePath(folderPath);
+  const stats = await fs.stat(target);
+  if (!stats.isDirectory()) throw new Error("That path is not a folder.");
+  if (!options.allowRoot && target === path.resolve(activeProject.rootPath)) {
+    throw new Error("The active server root cannot be deleted.");
+  }
+  return target;
+}
+
+async function copyFolderInto(sourceFolder, destinationFolder) {
+  const sourceStats = await fs.stat(sourceFolder);
+  if (!sourceStats.isDirectory()) throw new Error("Choose a folder to upload.");
+  const destination = await requireSafeFolderPath(destinationFolder, { allowRoot: true });
+  const target = path.join(destination, path.basename(sourceFolder));
+  if (!isWithinRoot(target)) throw new Error("The upload target is outside the active server folder.");
+  try {
+    await fs.stat(target);
+    throw new Error(`A folder named ${path.basename(sourceFolder)} already exists there.`);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  await fs.cp(sourceFolder, target, { recursive: true, errorOnExist: true, force: false });
+  return target;
+}
+
 function isTextFile(fileName) {
   const extension = path.extname(fileName).toLowerCase();
   return TEXT_EXTENSIONS.has(extension) || !extension;
@@ -821,7 +848,13 @@ print('[WOLFHQ] Desktop control bridge ready.')
 async function installControlBridge() {
   if (activeMode === "remote") {
     const files = controlBridgeFiles();
-    return remoteServer.installControlBridge(files.manifest, files.serverScript);
+    const result = await remoteServer.installControlBridge(files.manifest, files.serverScript);
+    activeProject = await remoteServer.scan();
+    try {
+      const health = await remoteServer.callControl("health", null, "GET");
+      if (health?.ok) return { ...result, requiresServerRestart: false, running: true };
+    } catch {}
+    return result;
   }
   const paths = getControlPaths();
   await fs.mkdir(paths.resourceRoot, { recursive: true });
@@ -836,15 +869,24 @@ async function installControlBridge() {
   await fs.writeFile(path.join(paths.resourceRoot, "server.lua"), serverScript, "utf8");
 
   const serverCfg = await fs.readFile(paths.configPath, "utf8");
-  if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) {
+  const ensureLines = [];
+  if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
+  if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
+  if (ensureLines.length) {
     const suffix = serverCfg.endsWith("\n") ? "" : "\n";
     await fs.writeFile(
       paths.configPath,
-      `${serverCfg}${suffix}\n# WOLFHQ desktop command bridge\nensure wolfhq-control\n`,
+      `${serverCfg}${suffix}\n# WOLFHQ desktop command bridge\n${ensureLines.join("\n")}\n`,
       "utf8"
     );
   }
-  return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true };
+  activeProject = await scanDirectory(activeRoot);
+  activeProject.mode = "local";
+  try {
+    const health = await callControl(endpointFromConfig(), "health", null, "GET");
+    if (health?.ok) return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: false, running: true };
+  } catch {}
+  return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
 }
 
 async function callControl(endpoint, route, payload, method = "POST") {
@@ -1227,6 +1269,44 @@ ipcMain.handle("resource:delete", async (_event, resourcePath) => {
   activeProject.mode = "local";
   await getOpsManager().audit("resource.deleted", { name: resource.name, path: target, mode: "local" });
   return { ok: true, name: resource.name, path: target, project: activeProject };
+});
+
+ipcMain.handle("folder:delete", async (_event, folderPath) => {
+  await getOpsManager().assertPermission("resource");
+  await getOpsManager().createBackup("pre-folder-delete");
+  if (activeMode === "remote") {
+    const result = await remoteServer.deleteFolder(folderPath);
+    activeProject = await remoteServer.scan();
+    await getOpsManager().audit("folder.deleted", { name: result.name, path: result.path, mode: "remote" });
+    return { ...result, project: activeProject };
+  }
+  const target = await requireSafeFolderPath(folderPath);
+  await fs.rm(target, { recursive: true, force: false });
+  activeProject = await scanDirectory(activeRoot);
+  activeProject.mode = "local";
+  await getOpsManager().audit("folder.deleted", { name: path.basename(target), path: target, mode: "local" });
+  return { ok: true, name: path.basename(target), path: target, project: activeProject };
+});
+
+ipcMain.handle("folder:upload", async (_event, destinationPath) => {
+  await getOpsManager().assertPermission("resource");
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose folder to upload into this server",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const sourceFolder = result.filePaths[0];
+  if (activeMode === "remote") {
+    const upload = await remoteServer.uploadFolder(sourceFolder, destinationPath);
+    activeProject = await remoteServer.scan();
+    await getOpsManager().audit("folder.uploaded", { name: upload.name, path: upload.path, mode: "remote" });
+    return { ...upload, project: activeProject };
+  }
+  const target = await copyFolderInto(sourceFolder, destinationPath);
+  activeProject = await scanDirectory(activeRoot);
+  activeProject.mode = "local";
+  await getOpsManager().audit("folder.uploaded", { name: path.basename(target), path: target, mode: "local" });
+  return { ok: true, name: path.basename(target), path: target, project: activeProject };
 });
 
 ipcMain.handle("server:status", async (_event, endpoint) => {

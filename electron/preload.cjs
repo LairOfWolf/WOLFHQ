@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("neonCore", {
   saveFile: (filePath, content) => ipcRenderer.invoke("file:save", filePath, content),
   createResource: (options) => ipcRenderer.invoke("resource:create", options),
   deleteResource: (resourcePath) => ipcRenderer.invoke("resource:delete", resourcePath),
+  deleteFolder: (folderPath) => ipcRenderer.invoke("folder:delete", folderPath),
+  uploadFolder: (destinationPath) => ipcRenderer.invoke("folder:upload", destinationPath),
   createFile: (options) => ipcRenderer.invoke("file:create", options),
   getServerStatus: (endpoint) => ipcRenderer.invoke("server:status", endpoint),
   getServerLogs: () => ipcRenderer.invoke("server:logs"),
