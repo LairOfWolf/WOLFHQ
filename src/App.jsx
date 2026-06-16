@@ -1,0 +1,2020 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import {
+  Activity, AlertTriangle, Archive, Ban, BarChart3, Bell, Box, Braces, Check, ChevronDown, ChevronRight, Circle,
+  Clock, Cloud, Code2, Cpu, Database, Download, ExternalLink, File, FileCode2, FileJson, Folder, FolderOpen, Gauge,
+  Eye, Fingerprint, GitBranch, Globe2, HardDrive, History, KeyRound, Layers3, LockKeyhole, Maximize2, Minimize2, Network,
+  PackageCheck, Play, Plus, RefreshCw, RotateCcw, Save, Search, Send, Server, Settings2, ShieldCheck, Sparkles,
+  ShieldAlert, Square, Terminal, Trash2, UserCog, UserX, Users, Wifi, X, Zap
+} from "lucide-react";
+
+const api = window.neonCore || {
+  chooseServerFolder: async () => null,
+  loadRecentProject: async () => null,
+  listRemoteProfiles: async () => [],
+  choosePrivateKey: async () => "",
+  connectRemote: async () => null,
+  deleteRemoteProfile: async () => null,
+  disconnectRemote: async () => null,
+  scanProject: async () => null,
+  readFile: async () => null,
+  saveFile: async () => null,
+  createResource: async () => null,
+  deleteResource: async () => null,
+  createFile: async () => null,
+  getServerStatus: async () => EMPTY_STATUS,
+  getServerLogs: async () => ({ path: "", lines: [] }),
+  installControlBridge: async () => null,
+  getControlStatus: async () => ({ installed: false, running: false }),
+  sendAnnouncement: async () => null,
+  restartServer: async () => null,
+  getOpsDashboard: async () => ({ metrics: [], notes: {}, playerHistory: [], audit: [], accounts: [], current: null, settings: {} }),
+  recordTelemetry: async () => null,
+  getFleet: async () => [],
+  getResourceStates: async () => [],
+  resourceAction: async () => null,
+  getResourceCatalog: async () => [],
+  installOfficialResource: async () => null,
+  runConsoleCommand: async () => null,
+  getPlayerDetails: async () => [],
+  playerAction: async () => null,
+  savePlayerNote: async () => null,
+  listBackups: async () => [],
+  createBackup: async () => null,
+  restoreBackup: async () => null,
+  gitAction: async () => ({ output: "" }),
+  databaseTables: async () => [],
+  databaseRows: async () => ({ rows: [], columns: [] }),
+  databaseUpdate: async () => null,
+  listAccounts: async () => ({ accounts: [], current: null }),
+  createAccount: async () => null,
+  loginAccount: async () => null,
+  deleteAccount: async () => null,
+  getOpsSettings: async () => ({}),
+  updateOpsSettings: async () => null,
+  getAiSettings: async () => ({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", hasApiKey: false }),
+  saveAiSettings: async () => null,
+  getAiModels: async () => ({ models: [], live: false }),
+  searchAiFiles: async () => ({ indexedFiles: 0, results: [] }),
+  proposeAiChanges: async () => ({ summary: "", indexedFiles: 0, contextFiles: 0, files: [] }),
+  applyAiChanges: async () => null,
+  getUpdaterSettings: async () => ({ repo: "", checkOnStartup: true, includePrerelease: false }),
+  saveUpdaterSettings: async (input) => input,
+  checkForUpdate: async () => ({ available: false, currentVersion: "2.1.0", latestVersion: "2.1.0", assets: [] }),
+  downloadUpdate: async () => null,
+  openExternal: async () => null,
+  minimize: () => {},
+  maximize: () => {},
+  close: () => {}
+};
+const EMPTY_STATUS = { online: false, players: [], playerCount: 0, maxPlayers: 0, process: null };
+const OPERATIONS_VIEWS = new Set(["performance", "backups", "fleet", "git", "database", "automation", "accounts", "history", "ai"]);
+const ANTI_CHEAT_MODULES = [
+  { name: "PLAYER INTEGRITY", detail: "Godmode, health, armour, invisibility", icon: ShieldCheck },
+  { name: "MOVEMENT ANALYSIS", detail: "Noclip, teleport, speed, impossible movement", icon: Activity },
+  { name: "WEAPON CONTROL", detail: "Blacklisted weapons, damage and ammo anomalies", icon: CrosshairIcon },
+  { name: "EVENT FIREWALL", detail: "Abusive events, triggers and injection patterns", icon: Zap },
+  { name: "ENTITY DEFENCE", detail: "Vehicle, ped and object spawn protection", icon: Box },
+  { name: "IDENTITY SIGNALS", detail: "Identifiers, session fingerprint and ban history", icon: Fingerprint }
+];
+const AI_MODEL_FALLBACKS = {
+  anthropic: [
+    { id: "claude-fable-5", name: "Claude Fable 5" },
+    { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" }
+  ],
+  "openai-compatible": [
+    { id: "gpt-5.5", name: "GPT-5.5" },
+    { id: "gpt-5.4", name: "GPT-5.4" },
+    { id: "gpt-5.4-mini", name: "GPT-5.4 mini" },
+    { id: "gpt-5.4-nano", name: "GPT-5.4 nano" }
+  ]
+};
+
+function formatBytes(bytes) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function fileIcon(name) {
+  const extension = name.split(".").pop()?.toLowerCase();
+  if (extension === "json") return <FileJson size={15} />;
+  if (["lua", "js", "jsx", "ts", "tsx", "css", "html"].includes(extension)) return <FileCode2 size={15} />;
+  return <File size={15} />;
+}
+
+function languageExtensions(filePath) {
+  if (/\.(js|jsx|ts|tsx)$/i.test(filePath)) return [javascript({ jsx: true, typescript: /\.tsx?$/i.test(filePath) })];
+  if (/\.json$/i.test(filePath)) return [json()];
+  return [];
+}
+
+function cleanErrorMessage(message) {
+  return String(message || "")
+    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "")
+    .replace(/^Error:\s*/i, "");
+}
+
+function TreeNode({ node, depth = 0, filter, onOpen, selectedPath }) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const matches = !filter || node.name.toLowerCase().includes(filter.toLowerCase());
+  const childMatches = node.type === "folder" && node.children?.some((child) =>
+    child.name.toLowerCase().includes(filter.toLowerCase())
+  );
+  if (!matches && !childMatches) return null;
+
+  if (node.type === "folder") {
+    return (
+      <div>
+        <button className="tree-row" style={{ paddingLeft: 10 + depth * 14 }} onClick={() => setExpanded(!expanded)}>
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {expanded ? <FolderOpen size={15} className="folder-icon" /> : <Folder size={15} className="folder-icon" />}
+          <span>{node.name}</span>
+          <span className="tree-count">{node.children?.length || 0}</span>
+        </button>
+        {expanded && node.children?.map((child) => (
+          <TreeNode key={child.path} node={child} depth={depth + 1} filter={filter} onOpen={onOpen} selectedPath={selectedPath} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className={`tree-row file-row ${selectedPath === node.path ? "active" : ""} ${!node.editable ? "muted" : ""}`}
+      style={{ paddingLeft: 25 + depth * 14 }}
+      onClick={() => node.editable && onOpen(node)}
+      title={node.relativePath}
+    >
+      {fileIcon(node.name)}
+      <span>{node.name}</span>
+      <span className="tree-size">{formatBytes(node.size)}</span>
+    </button>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, detail, color = "cyan" }) {
+  return (
+    <div className={`metric-card ${color}`}>
+      <div className="metric-icon"><Icon size={19} /></div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{detail}</small>
+      </div>
+      <div className="metric-scanline" />
+    </div>
+  );
+}
+
+function SparkChart({ values, color = "#50dff9", label }) {
+  const numbers = values.map((value) => Number(value) || 0);
+  const max = Math.max(1, ...numbers);
+  const points = numbers.length > 1
+    ? numbers.map((value, index) => `${(index / (numbers.length - 1)) * 100},${38 - (value / max) * 34}`).join(" ")
+    : "0,38 100,38";
+  return (
+    <div className="spark-chart">
+      <span>{label}</span>
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none">
+        <polyline points={points} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <strong>{numbers.at(-1) || 0}</strong>
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="modal panel-corners" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div><Sparkles size={17} /><strong>{title}</strong></div>
+          <button onClick={onClose}><X size={17} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CatalogDropdown({ label, value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`hub-dropdown ${open ? "open" : ""}`} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+    }}>
+      <span>{label}</span>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <strong>{value}</strong><ChevronDown size={15} />
+      </button>
+      {open && (
+        <div className="hub-dropdown-menu">
+          {options.map((option) => (
+            <button
+              type="button"
+              className={option === value ? "active" : ""}
+              key={option}
+              onClick={() => {
+                onChange(option);
+                setOpen(false);
+              }}
+            >
+              <span>{option}</span>{option === value && <Check size={13} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CrosshairIcon(props) {
+  return <Gauge {...props} />;
+}
+
+export default function App() {
+  const [project, setProject] = useState(null);
+  const [status, setStatus] = useState(EMPTY_STATUS);
+  const [endpoint, setEndpoint] = useState("http://127.0.0.1:30120");
+  const [activeView, setActiveView] = useState("project");
+  const [filter, setFilter] = useState("");
+  const [tabs, setTabs] = useState([]);
+  const [activePath, setActivePath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState("");
+  const [modal, setModal] = useState(null);
+  const [logs, setLogs] = useState({ path: "", lines: [] });
+  const [controlStatus, setControlStatus] = useState({ installed: false, running: false });
+  const [remoteProfiles, setRemoteProfiles] = useState([]);
+  const [remoteTrust, setRemoteTrust] = useState(null);
+  const [remoteConnectMessage, setRemoteConnectMessage] = useState("");
+  const [remoteConnectError, setRemoteConnectError] = useState("");
+  const [remoteDraft, setRemoteDraft] = useState({
+    id: "", name: "My Remote FiveM", host: "", port: 22, username: "root",
+    rootPath: "/home/fivem/txData/default", fiveMPort: 30120, authType: "password",
+    privateKeyPath: "", secret: "", rememberSecret: true, fingerprint: ""
+  });
+  const [announcement, setAnnouncement] = useState("");
+  const [restartDraft, setRestartDraft] = useState({ delay: 15, reason: "Scheduled maintenance" });
+  const [resourceStates, setResourceStates] = useState([]);
+  const [resourceSearch, setResourceSearch] = useState("");
+  const [resourceCatalog, setResourceCatalog] = useState([]);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogFramework, setCatalogFramework] = useState("Detected");
+  const [catalogCategory, setCatalogCategory] = useState("All");
+  const [catalogInstalling, setCatalogInstalling] = useState("");
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [antiCheatDisplay, setAntiCheatDisplay] = useState("Overview");
+  const [antiCheatProfile, setAntiCheatProfile] = useState("Balanced");
+  const [playerDetails, setPlayerDetails] = useState([]);
+  const [consoleCommand, setConsoleCommand] = useState("");
+  const [consoleFilter, setConsoleFilter] = useState("");
+  const [opsData, setOpsData] = useState({ metrics: [], notes: {}, playerHistory: [], audit: [], accounts: [], current: null, settings: {} });
+  const [backups, setBackups] = useState([]);
+  const [fleet, setFleet] = useState([]);
+  const [gitTarget, setGitTarget] = useState("");
+  const [gitOutput, setGitOutput] = useState("Select a resource or use the server root, then inspect its Git state.");
+  const [dbConfig, setDbConfig] = useState({ host: "127.0.0.1", port: 3306, user: "root", password: "", database: "" });
+  const [dbTables, setDbTables] = useState([]);
+  const [dbTable, setDbTable] = useState("");
+  const [dbRows, setDbRows] = useState({ rows: [], columns: [] });
+  const [accountDraft, setAccountDraft] = useState({ username: "", role: "developer", password: "" });
+  const [accountLogin, setAccountLogin] = useState({ id: "", password: "" });
+  const [opsSettings, setOpsSettings] = useState({ crashDetection: true, autoRestart: false, restartCommand: "", discordWebhook: "", backupSchedule: "manual" });
+  const [aiSettings, setAiSettings] = useState({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", apiKey: "", hasApiKey: false });
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiSearchQuery, setAiSearchQuery] = useState("");
+  const [aiSearch, setAiSearch] = useState({ indexedFiles: 0, results: [] });
+  const [aiProposal, setAiProposal] = useState(null);
+  const [aiSelected, setAiSelected] = useState({});
+  const [aiModels, setAiModels] = useState(AI_MODEL_FALLBACKS.anthropic);
+  const [aiModelsLive, setAiModelsLive] = useState(false);
+  const [aiMessages, setAiMessages] = useState([]);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [updater, setUpdater] = useState({
+    settings: { repo: "", checkOnStartup: true, includePrerelease: false },
+    latest: null,
+    checking: false,
+    downloading: false,
+    status: "Add your GitHub owner/repo in Settings to enable updates."
+  });
+  const [resourceDraft, setResourceDraft] = useState({
+    name: "wolfhq-custom", description: "Custom gameplay resource", author: "WOLFHQ",
+    framework: "Standalone", includeClient: true, includeServer: true
+  });
+  const [fileDraft, setFileDraft] = useState({ name: "custom.lua", parentPath: "", content: "-- Custom FiveM script\n\n" });
+  const searchRef = useRef(null);
+  const aiChatRef = useRef(null);
+  const recentLoadedRef = useRef(false);
+
+  const activeTab = tabs.find((tab) => tab.path === activePath);
+  const isRemote = project?.mode === "remote";
+  const notify = useCallback((message) => {
+    setToast(cleanErrorMessage(message));
+    window.setTimeout(() => setToast(""), 2600);
+  }, []);
+
+  const refreshStatus = useCallback(async (value = endpoint) => {
+    const next = await api.getServerStatus(value);
+    setStatus(next);
+    api.recordTelemetry(next).catch(() => {});
+    if (next.online && next.endpoint && next.endpoint !== value) setEndpoint(next.endpoint);
+  }, [endpoint]);
+
+  const refreshControlStatus = useCallback(async (value = endpoint) => {
+    if (!project) return;
+    setControlStatus(await api.getControlStatus(value));
+  }, [endpoint, project]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getUpdaterSettings().then(async (settings) => {
+      if (cancelled) return;
+      setUpdater((current) => ({ ...current, settings }));
+      if (!settings.repo) {
+        setUpdater((current) => ({ ...current, status: "Add your GitHub owner/repo in Settings to enable updates." }));
+        return;
+      }
+      if (!settings.checkOnStartup) return;
+      setUpdater((current) => ({ ...current, checking: true, status: "Checking GitHub releases..." }));
+      try {
+        const latest = await api.checkForUpdate(settings);
+        if (cancelled) return;
+        setUpdater((current) => ({
+          ...current,
+          latest,
+          checking: false,
+          status: latest.available ? `Update ${latest.latestVersion} is ready to download.` : `WOLFHQ ${latest.currentVersion} is up to date.`
+        }));
+      } catch (error) {
+        if (!cancelled) setUpdater((current) => ({ ...current, checking: false, status: cleanErrorMessage(error.message) }));
+      }
+    }).catch((error) => {
+      if (!cancelled) setUpdater((current) => ({ ...current, status: cleanErrorMessage(error.message) }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadOperations = useCallback(async () => {
+    if (!project) return;
+    const [dashboard, backupList, fleetList] = await Promise.all([
+      api.getOpsDashboard(),
+      api.listBackups(),
+      api.getFleet()
+    ]);
+    setOpsData(dashboard);
+    setOpsSettings(dashboard.settings || {});
+    setBackups(backupList);
+    setFleet(fleetList);
+    setGitTarget((current) => current || project.rootPath);
+  }, [project]);
+
+  useEffect(() => {
+    if (recentLoadedRef.current) return;
+    recentLoadedRef.current = true;
+    api.loadRecentProject().then((result) => {
+      if (!result) return;
+      setProject(result);
+      const configuredPort = result.config?.endpoint?.split(":").pop()?.replace(/\D/g, "");
+      setEndpoint(result.mode === "remote"
+        ? `SSH tunnel -> 127.0.0.1:${result.config.port || configuredPort || 30120}`
+        : configuredPort ? `http://127.0.0.1:${configuredPort}` : "http://127.0.0.1:30120");
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!project) return;
+    refreshStatus(endpoint);
+    refreshControlStatus(endpoint);
+    const timer = window.setInterval(() => refreshStatus(endpoint), 4000);
+    return () => window.clearInterval(timer);
+  }, [project, endpoint, refreshStatus, refreshControlStatus]);
+
+  useEffect(() => {
+    if (!project || activeView !== "console") return;
+    const loadLogs = async () => setLogs(await api.getServerLogs());
+    loadLogs();
+    const timer = window.setInterval(loadLogs, 4000);
+    return () => window.clearInterval(timer);
+  }, [project, activeView]);
+
+  useEffect(() => {
+    if (!project || activeView !== "resources") return;
+    const loadStates = async () => setResourceStates(await api.getResourceStates(endpoint));
+    loadStates().catch(() => {});
+    const timer = window.setInterval(() => loadStates().catch(() => {}), 5000);
+    return () => window.clearInterval(timer);
+  }, [project, activeView, endpoint]);
+
+  const loadResourceCatalog = useCallback(async (force = false) => {
+    setCatalogLoading(true);
+    try {
+      const resources = await api.getResourceCatalog(force);
+      setResourceCatalog(resources);
+      if (force) notify(`Official catalog refreshed: ${resources.length} repositories`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    if (!project || activeView !== "resourceHub") return;
+    loadResourceCatalog();
+  }, [project, activeView, loadResourceCatalog]);
+
+  useEffect(() => {
+    if (!project || activeView !== "players") return;
+    const loadPlayers = async () => setPlayerDetails(await api.getPlayerDetails(endpoint));
+    loadPlayers().catch(() => setPlayerDetails(status.players || []));
+    const timer = window.setInterval(() => loadPlayers().catch(() => {}), 4000);
+    return () => window.clearInterval(timer);
+  }, [project, activeView, endpoint, status.players]);
+
+  useEffect(() => {
+    if (!project || !OPERATIONS_VIEWS.has(activeView)) return;
+    loadOperations().catch((error) => notify(error.message));
+  }, [project, activeView, loadOperations, notify]);
+
+  useEffect(() => {
+    if (!project || activeView !== "ai") return;
+    Promise.all([api.getAiSettings(), api.getAiModels(), api.searchAiFiles("")]).then(([settings, modelResult, search]) => {
+      setAiSettings((current) => ({ ...current, ...settings, apiKey: "" }));
+      setAiModels(modelResult.models?.length ? modelResult.models : AI_MODEL_FALLBACKS[settings.provider]);
+      setAiModelsLive(Boolean(modelResult.live));
+      setAiSearch(search);
+    }).catch((error) => notify(error.message));
+  }, [project, activeView, notify]);
+
+  useEffect(() => {
+    if (!aiChatRef.current) return;
+    aiChatRef.current.scrollTo({ top: aiChatRef.current.scrollHeight, behavior: "smooth" });
+  }, [aiMessages, aiBusy, aiProposal]);
+
+  useEffect(() => {
+    function handleShortcut(event) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveActive();
+      }
+      if (event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  });
+
+  async function chooseFolder() {
+    setBusy(true);
+    try {
+      const result = await api.chooseServerFolder();
+      if (!result) return;
+      setProject(result);
+      setTabs([]);
+      setActivePath("");
+      setActiveView("project");
+      const configuredPort = result.config?.endpoint?.split(":").pop()?.replace(/\D/g, "");
+      const nextEndpoint = configuredPort ? `http://127.0.0.1:${configuredPort}` : "http://127.0.0.1:30120";
+      setEndpoint(nextEndpoint);
+      notify(`Indexed ${result.stats.files.toLocaleString()} files`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openRemoteConnections() {
+    try {
+      setRemoteProfiles(await api.listRemoteProfiles());
+      setRemoteTrust(null);
+      setModal("remote");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  function loadRemoteProfile(profileId) {
+    const profile = remoteProfiles.find((candidate) => candidate.id === profileId);
+    if (!profile) {
+      setRemoteDraft({
+        id: "", name: "My Remote FiveM", host: "", port: 22, username: "root",
+        rootPath: "/home/fivem/txData/default", fiveMPort: 30120, authType: "password",
+        privateKeyPath: "", secret: "", rememberSecret: true, fingerprint: ""
+      });
+      return;
+    }
+    setRemoteDraft((current) => ({
+      ...current,
+      ...profile,
+      secret: "",
+      rememberSecret: profile.hasSavedSecret
+    }));
+  }
+
+  async function connectRemote(event, acceptFingerprint = "") {
+    event?.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setRemoteConnectError("");
+    setRemoteConnectMessage(acceptFingerprint
+      ? "Authenticating securely with the VPS..."
+      : "Contacting the VPS and checking its identity...");
+    const progressTimer = window.setTimeout(() => {
+      setRemoteConnectMessage(acceptFingerprint
+        ? "Authenticating and indexing the remote FiveM server files..."
+        : "Waiting for the VPS to complete the SSH handshake...");
+    }, 2400);
+    try {
+      const { secret, rememberSecret, ...profile } = remoteDraft;
+      const result = await api.connectRemote({ profile, secret, rememberSecret, acceptFingerprint });
+      if (result.requiresTrust) {
+        setRemoteTrust(result);
+        setRemoteConnectMessage("");
+        setModal("trust");
+        return;
+      }
+      setProject(result.project);
+      setTabs([]);
+      setActivePath("");
+      setActiveView("project");
+      setEndpoint(`SSH tunnel -> 127.0.0.1:${result.project.config.port || remoteDraft.fiveMPort}`);
+      setModal(null);
+      setRemoteTrust(null);
+      notify(`Securely connected to ${result.profile.name}`);
+    } catch (error) {
+      const message = cleanErrorMessage(error.message);
+      if (acceptFingerprint) {
+        setRemoteConnectError(message);
+        setRemoteConnectMessage("");
+      } else {
+        notify(message);
+      }
+    } finally {
+      window.clearTimeout(progressTimer);
+      setBusy(false);
+    }
+  }
+
+  async function chooseRemoteKey() {
+    const privateKeyPath = await api.choosePrivateKey();
+    if (privateKeyPath) setRemoteDraft((current) => ({ ...current, privateKeyPath }));
+  }
+
+  async function deleteRemoteProfile() {
+    if (!remoteDraft.id) return;
+    await api.deleteRemoteProfile(remoteDraft.id);
+    const profiles = await api.listRemoteProfiles();
+    setRemoteProfiles(profiles);
+    loadRemoteProfile("");
+    notify("Remote profile removed");
+  }
+
+  async function rescan() {
+    if (!project) return;
+    setBusy(true);
+    try {
+      const result = await api.scanProject(project.rootPath);
+      setProject(result);
+      notify("Project intelligence refreshed");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openFile(node) {
+    const existing = tabs.find((tab) => tab.path === node.path);
+    if (existing) {
+      setActivePath(node.path);
+      return;
+    }
+    try {
+      const result = await api.readFile(node.path);
+      setTabs((current) => [...current, {
+        name: node.name, path: node.path, content: result.content, original: result.content, dirty: false
+      }]);
+      setActivePath(node.path);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  function updateContent(content) {
+    setTabs((current) => current.map((tab) =>
+      tab.path === activePath ? { ...tab, content, dirty: content !== tab.original } : tab
+    ));
+  }
+
+  async function saveActive() {
+    if (!activeTab) return;
+    try {
+      await api.saveFile(activeTab.path, activeTab.content);
+      setTabs((current) => current.map((tab) =>
+        tab.path === activePath ? { ...tab, original: tab.content, dirty: false } : tab
+      ));
+      notify(`Saved ${activeTab.name}`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  function closeTab(pathToClose) {
+    const index = tabs.findIndex((tab) => tab.path === pathToClose);
+    const nextTabs = tabs.filter((tab) => tab.path !== pathToClose);
+    setTabs(nextTabs);
+    if (activePath === pathToClose) {
+      setActivePath(nextTabs[Math.max(0, index - 1)]?.path || "");
+    }
+  }
+
+  async function createResource(event) {
+    event.preventDefault();
+    try {
+      const resourcesFolder = project.resourcesRoots?.[0] || project.tree.find((node) => node.type === "folder" && node.name.toLowerCase() === "resources")?.path;
+      const separator = isRemote ? "/" : "\\";
+      const parentPath = resourcesFolder || (project.resources[0]?.path
+        ? project.resources[0].path.split(/[\\/]/).slice(0, -1).join(separator)
+        : project.rootPath);
+      await api.createResource({ ...resourceDraft, parentPath });
+      setModal(null);
+      await rescan();
+      notify(`Resource ${resourceDraft.name} created`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  function openFileForge() {
+    const separator = isRemote ? "/" : "\\";
+    setFileDraft((current) => ({
+      ...current,
+      parentPath: activeTab
+        ? activeTab.path.split(/[\\/]/).slice(0, -1).join(separator)
+        : project.resources[0]?.path || project.rootPath
+    }));
+    setModal("file");
+  }
+
+  async function createScriptFile(event) {
+    event.preventDefault();
+    try {
+      const result = await api.createFile(fileDraft);
+      setModal(null);
+      await rescan();
+      await openFile({ path: result.path, name: fileDraft.name, editable: true });
+      notify(`Created ${fileDraft.name}`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function installBridge() {
+    setBusy(true);
+    try {
+      const result = await api.installControlBridge();
+      await rescan();
+      await refreshControlStatus(endpoint);
+      notify(result.requiresServerRestart ? "Control bridge installed. Restart the server once to activate it." : "Control bridge ready");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAnnouncement(event) {
+    event.preventDefault();
+    try {
+      await api.sendAnnouncement(endpoint, announcement);
+      setAnnouncement("");
+      setModal(null);
+      notify("Announcement sent to connected players");
+    } catch (error) {
+      notify(controlStatus.running ? error.message : "Install and activate the WOLFHQ control bridge first");
+    }
+  }
+
+  async function submitRestart(event) {
+    event.preventDefault();
+    try {
+      await api.restartServer(endpoint, restartDraft);
+      setModal(null);
+      notify(`Server restart scheduled in ${restartDraft.delay} seconds`);
+    } catch (error) {
+      notify(controlStatus.running ? error.message : "Install and activate the WOLFHQ control bridge first");
+    }
+  }
+
+  async function manageResource(resource, action) {
+    try {
+      if (action === "update") {
+        await api.createBackup("pre-resource-update");
+        const result = await api.gitAction({ path: resource.path, action: "pull" });
+        notify(result.output || `${resource.name} updated`);
+      } else {
+        await api.resourceAction(endpoint, resource.name, action);
+        notify(`${resource.name}: ${action} command sent`);
+      }
+      setResourceStates(await api.getResourceStates(endpoint));
+    } catch (error) {
+      notify(controlStatus.running ? error.message : "Install or repair the WOLFHQ control bridge, then restart the FiveM server once.");
+    }
+  }
+
+  async function deleteResourceFolder(resource) {
+    const typed = window.prompt(`This deletes the entire "${resource.name}" resource folder and all files inside it after creating a restore point.\n\nType ${resource.name} to confirm:`);
+    if (typed === null) return;
+    if (typed.trim() !== resource.name) {
+      notify("Resource delete canceled");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.deleteResource(resource.path);
+      const separator = isRemote ? "/" : "\\";
+      setTabs((current) => current.filter((tab) => tab.path !== resource.path && !tab.path.startsWith(`${resource.path}${separator}`)));
+      if (activePath === resource.path || activePath.startsWith(`${resource.path}${separator}`)) setActivePath("");
+      setProject(result.project || await api.scanProject(project.rootPath));
+      setResourceStates(await api.getResourceStates(endpoint));
+      notify(`${resource.name} deleted after backup`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function installCatalogResource(resource) {
+    if (!window.confirm(`Download the official ${resource.repo} repository into this server's resources folder?`)) return;
+    setCatalogInstalling(resource.id);
+    try {
+      const result = await api.installOfficialResource(resource.id);
+      await rescan();
+      notify(`${result.resource.repo} installed. Review its documentation and dependencies before ensuring it.`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setCatalogInstalling("");
+    }
+  }
+
+  async function submitConsoleCommand(event) {
+    event.preventDefault();
+    if (!consoleCommand.trim()) return;
+    try {
+      await api.runConsoleCommand(endpoint, consoleCommand);
+      setConsoleCommand("");
+      setLogs(await api.getServerLogs());
+      notify("Console command executed");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function administerPlayer(player, action) {
+    const reason = window.prompt(`${action === "ban" ? "Ban" : "Kick"} reason for ${player.name}:`, "WOLFHQ administration");
+    if (reason === null) return;
+    if (action === "ban" && !window.confirm(`Ban ${player.name} using their current identifiers?`)) return;
+    try {
+      await api.playerAction(endpoint, { id: player.id, name: player.name, action, reason });
+      notify(`${player.name} ${action === "ban" ? "banned" : "kicked"}`);
+      setPlayerDetails(await api.getPlayerDetails(endpoint));
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function editPlayerNote(player) {
+    const key = player.identifiers?.[0] || `${player.name}:${player.id}`;
+    const note = window.prompt(`Private WOLFHQ note for ${player.name}:`, opsData.notes?.[key] || "");
+    if (note === null) return;
+    try {
+      await api.savePlayerNote(key, note);
+      setOpsData(await api.getOpsDashboard());
+      notify("Player note saved");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function createBackupNow() {
+    setBusy(true);
+    try {
+      await api.createBackup("manual");
+      setBackups(await api.listBackups());
+      notify("Restore point created");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreBackupNow(backup) {
+    if (!window.confirm(`Restore ${backup.name}? Current files will be replaced by this restore point.`)) return;
+    setBusy(true);
+    try {
+      await api.restoreBackup(backup.path);
+      await rescan();
+      notify("Backup restored");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runGit(action) {
+    if (action === "rollback" && !window.confirm("Roll back this Git working tree to the state before the last pull?")) return;
+    try {
+      if (action === "pull") await api.createBackup("pre-deploy");
+      const result = await api.gitAction({ path: gitTarget || project.rootPath, action });
+      setGitOutput(result.output);
+      notify(`Git ${action} completed`);
+    } catch (error) {
+      setGitOutput(cleanErrorMessage(error.message));
+      notify(error.message);
+    }
+  }
+
+  async function connectDatabase() {
+    try {
+      const tables = await api.databaseTables(dbConfig);
+      setDbTables(tables);
+      setDbTable(tables[0] || "");
+      setDbRows(tables[0] ? await api.databaseRows(dbConfig, tables[0]) : { rows: [], columns: [] });
+      notify(`Database linked: ${tables.length} tables`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function loadDatabaseTable(table) {
+    setDbTable(table);
+    try {
+      setDbRows(await api.databaseRows(dbConfig, table));
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function editDatabaseCell(row, column) {
+    const keyColumn = dbRows.columns.find((item) => item.Key === "PRI")?.Field || dbRows.columns[0]?.Field;
+    if (!keyColumn) return;
+    const value = window.prompt(`New value for ${column}:`, row[column] == null ? "" : String(row[column]));
+    if (value === null) return;
+    try {
+      await api.databaseUpdate(dbConfig, {
+        table: dbTable,
+        keyColumn,
+        keyValue: row[keyColumn],
+        column,
+        value
+      });
+      setDbRows(await api.databaseRows(dbConfig, dbTable));
+      notify(`${dbTable}.${column} updated`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function saveOpsSettings() {
+    try {
+      const settings = await api.updateOpsSettings(opsSettings);
+      setOpsSettings(settings);
+      notify("Operations settings saved");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function saveUpdaterSettings() {
+    try {
+      const settings = await api.saveUpdaterSettings(updater.settings);
+      setUpdater((current) => ({ ...current, settings, status: `Linked to GitHub releases: ${settings.repo}` }));
+      notify("Updater GitHub channel saved");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function checkAppUpdate() {
+    setUpdater((current) => ({ ...current, checking: true, status: "Checking GitHub releases..." }));
+    try {
+      const latest = await api.checkForUpdate(updater.settings);
+      setUpdater((current) => ({
+        ...current,
+        latest,
+        checking: false,
+        status: latest.available ? `Update ${latest.latestVersion} is ready to download.` : `WOLFHQ ${latest.currentVersion} is up to date.`
+      }));
+      notify(latest.available ? `Update ${latest.latestVersion} found` : "WOLFHQ is up to date");
+      return latest;
+    } catch (error) {
+      setUpdater((current) => ({ ...current, checking: false, status: cleanErrorMessage(error.message) }));
+      notify(error.message);
+      return null;
+    }
+  }
+
+  async function downloadAppUpdate() {
+    setUpdater((current) => ({ ...current, downloading: true, status: "Downloading latest GitHub release..." }));
+    try {
+      const result = await api.downloadUpdate(updater.settings);
+      setUpdater((current) => ({
+        ...current,
+        latest: result,
+        downloading: false,
+        status: result?.message || "Update downloaded."
+      }));
+      notify(result?.message || "Update downloaded");
+    } catch (error) {
+      setUpdater((current) => ({ ...current, downloading: false, status: cleanErrorMessage(error.message) }));
+      notify(error.message);
+    }
+  }
+
+  async function runTitlebarUpdate() {
+    if (updater.checking || updater.downloading) return;
+    const latest = updater.latest?.available ? updater.latest : await checkAppUpdate();
+    if (latest?.available) await downloadAppUpdate();
+  }
+
+  async function createOpsAccount(event) {
+    event.preventDefault();
+    try {
+      await api.createAccount(accountDraft);
+      setAccountDraft({ username: "", role: "developer", password: "" });
+      setOpsData(await api.getOpsDashboard());
+      notify("WOLFHQ account created");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function loginOpsAccount(event) {
+    event.preventDefault();
+    try {
+      await api.loginAccount(accountLogin);
+      setAccountLogin({ id: "", password: "" });
+      setOpsData(await api.getOpsDashboard());
+      notify("Active WOLFHQ account changed");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function deleteOpsAccount(account) {
+    if (!window.confirm(`Remove the ${account.role} account ${account.username}?`)) return;
+    try {
+      await api.deleteAccount(account.id);
+      setOpsData(await api.getOpsDashboard());
+      notify("WOLFHQ account removed");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function saveAiProvider() {
+    try {
+      const settings = await api.saveAiSettings(aiSettings);
+      const modelResult = await api.getAiModels();
+      setAiSettings((current) => ({ ...current, ...settings, apiKey: "" }));
+      setAiModels(modelResult.models?.length ? modelResult.models : AI_MODEL_FALLBACKS[settings.provider]);
+      setAiModelsLive(Boolean(modelResult.live));
+      notify("AI provider saved securely");
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function changeAiModel(model) {
+    const next = { ...aiSettings, model };
+    setAiSettings(next);
+    try {
+      const settings = await api.saveAiSettings(next);
+      setAiSettings((current) => ({ ...current, ...settings, model: settings?.model || model, apiKey: "" }));
+      notify(`AI model switched to ${model}`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  function startNewAiChat() {
+    if (aiBusy) return;
+    setAiMessages([]);
+    setAiProposal(null);
+    setAiSelected({});
+    setAiPrompt("");
+    notify("New AI chat started");
+  }
+
+  async function searchServerWithAi() {
+    setAiBusy(true);
+    try {
+      setAiSearch(await api.searchAiFiles(aiSearchQuery));
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function generateAiProposal() {
+    const question = aiPrompt.trim();
+    if (question.length < 2 || aiBusy) return;
+    setAiBusy(true);
+    setAiProposal(null);
+    setAiPrompt("");
+    setAiMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", text: question }]);
+    try {
+      const proposal = await api.proposeAiChanges(question);
+      setAiProposal(proposal);
+      setAiSelected(Object.fromEntries(proposal.files.map((file) => [file.path, true])));
+      setAiMessages((current) => [...current, {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: proposal.response || proposal.summary,
+        model: aiSettings.model
+      }]);
+      notify(proposal.files.length ? `${proposal.files.length} AI changes ready for review` : "AI analysis completed with no file changes");
+    } catch (error) {
+      setAiMessages((current) => [...current, { id: crypto.randomUUID(), role: "error", text: cleanErrorMessage(error.message) }]);
+      notify(error.message);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function applySelectedAiChanges() {
+    const selected = (aiProposal?.files || []).filter((file) => aiSelected[file.path]);
+    if (!selected.length) return;
+    if (!window.confirm(`Apply ${selected.length} reviewed AI file change${selected.length === 1 ? "" : "s"}? WOLFHQ will create a restore point first.`)) return;
+    setAiBusy(true);
+    try {
+      await api.applyAiChanges(selected);
+      setAiProposal(null);
+      setAiSelected({});
+      setTabs([]);
+      setActivePath("");
+      await rescan();
+      notify("AI changes applied after creating a restore point");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function changeAiProvider(provider) {
+    const models = AI_MODEL_FALLBACKS[provider];
+    setAiSettings((current) => ({
+      ...current,
+      provider,
+      model: provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4",
+      endpoint: provider === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/responses"
+    }));
+    setAiModels(models);
+    setAiModelsLive(false);
+  }
+
+  const resourceNames = useMemo(() => project?.resources?.slice(0, 8) || [], [project]);
+  const resourceStateMap = useMemo(() => Object.fromEntries(resourceStates.map((resource) => [resource.name, resource.state])), [resourceStates]);
+  const visibleResources = useMemo(() => {
+    const query = resourceSearch.trim().toLowerCase();
+    if (!query) return project?.resources || [];
+    return (project?.resources || []).filter((resource) => {
+      const state = resourceStateMap[resource.name] || "unknown";
+      return `${resource.name} ${resource.path} ${state}`.toLowerCase().includes(query);
+    });
+  }, [project?.resources, resourceSearch, resourceStateMap]);
+  const visibleLogs = useMemo(() => logs.lines.filter((line) => !consoleFilter || line.toLowerCase().includes(consoleFilter.toLowerCase())), [logs.lines, consoleFilter]);
+  const focusedView = Boolean(project && activeView !== "project");
+  const detectedCatalogFramework = useMemo(() => {
+    if (project?.framework === "QBCore") return "QBCore";
+    if (project?.framework === "Qbox") return "Qbox";
+    if (project?.framework === "ESX") return "ESX";
+    return "Standalone";
+  }, [project?.framework]);
+  const catalogCategories = useMemo(() => ["All", ...new Set(resourceCatalog.map((resource) => resource.category))], [resourceCatalog]);
+  const visibleCatalog = useMemo(() => {
+    const framework = catalogFramework === "Detected" ? detectedCatalogFramework : catalogFramework;
+    const query = catalogSearch.trim().toLowerCase();
+    return resourceCatalog.filter((resource) => {
+      const frameworkMatch = framework === "All" || resource.framework === framework;
+      const categoryMatch = catalogCategory === "All" || resource.category === catalogCategory;
+      const queryMatch = !query || `${resource.repo} ${resource.description} ${resource.owner} ${resource.category}`.toLowerCase().includes(query);
+      return frameworkMatch && categoryMatch && queryMatch;
+    });
+  }, [resourceCatalog, catalogFramework, catalogCategory, catalogSearch, detectedCatalogFramework]);
+  const detectedAntiCheats = project?.antiCheats || [];
+  const antiCheatChoices = useMemo(() => [
+    "Overview",
+    "Neko Anti-Cheat",
+    ...detectedAntiCheats.map((antiCheat) => `${antiCheat.provider} // ${antiCheat.resourceName}`)
+  ], [detectedAntiCheats]);
+  const selectedAntiCheat = useMemo(() => detectedAntiCheats.find((antiCheat) =>
+    `${antiCheat.provider} // ${antiCheat.resourceName}` === antiCheatDisplay
+  ), [detectedAntiCheats, antiCheatDisplay]);
+  const nekoSelected = antiCheatDisplay === "Neko Anti-Cheat";
+  const selectableAiModels = useMemo(() => {
+    if (aiModels.some((model) => model.id === aiSettings.model)) return aiModels;
+    return [{ id: aiSettings.model, name: aiSettings.model }, ...aiModels].filter((model) => model.id);
+  }, [aiModels, aiSettings.model]);
+
+  return (
+    <div className="app-shell">
+      <div className="ambient-grid" />
+      <header className="titlebar">
+        <div className="brand-lockup">
+          <img className="brand-logo" src="./assets/wolfhq-icon.png" alt="WOLFHQ" />
+          <div><strong>WOLFHQ</strong><span>FIVEM COMMAND CENTER // v2.1</span></div>
+        </div>
+        <div className="system-strip">
+          <span><Circle size={7} fill={status.online ? "#58ffd1" : "#ff577f"} /> {status.online ? "SERVER LINKED" : isRemote ? "SSH CONNECTED" : "LOCAL MODE"}</span>
+          <span>{isRemote ? "ENCRYPTED SSH + SFTP" : "SECURE FILE BRIDGE"}</span>
+          <span>{new Date().toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" }).toUpperCase()}</span>
+        </div>
+        <div className="update-control">
+          <button className={updater.checking || updater.downloading ? "spinning" : ""} onClick={runTitlebarUpdate} title={updater.status}>
+            <Download size={13} />
+            <span>{updater.downloading ? "DOWNLOADING" : updater.latest?.available ? `UPDATE ${updater.latest.latestVersion}` : "UPDATE"}</span>
+          </button>
+        </div>
+        <div className="window-controls">
+          <button onClick={api.minimize}><Minimize2 size={14} /></button>
+          <button onClick={api.maximize}><Maximize2 size={13} /></button>
+          <button className="close-window" onClick={api.close}><X size={15} /></button>
+        </div>
+      </header>
+
+      <div className={`workspace ${focusedView ? "focused-workspace" : ""}`}>
+        <aside className="rail">
+          <button className={`rail-button project-rail ${activeView === "project" ? "active" : ""}`} title="Project" onClick={() => setActiveView("project")}><Layers3 size={19} /><span>Project</span></button>
+          <button className={`rail-button resources-rail ${activeView === "resources" ? "active" : ""}`} title="Resources" onClick={() => setActiveView("resources")}><Box size={19} /><span>Resources</span></button>
+          <button className={`rail-button hub-rail ${activeView === "resourceHub" ? "active" : ""}`} title="Official Resource Hub" onClick={() => setActiveView("resourceHub")}><Download size={19} /><span>Hub</span></button>
+          <button className={`rail-button anticheat-rail ${activeView === "antiCheat" ? "active" : ""}`} title="Neko Anti-Cheat" onClick={() => setActiveView("antiCheat")}><ShieldAlert size={19} /><span>Neko AC</span></button>
+          <button className={`rail-button players-rail ${activeView === "players" ? "active" : ""}`} title="Players" onClick={() => setActiveView("players")}><Users size={19} /><span>Players</span></button>
+          <button className={`rail-button console-rail ${activeView === "console" ? "active" : ""}`} title="Console" onClick={() => setActiveView("console")}><Terminal size={19} /><span>Console</span></button>
+          <button className={`rail-button performance-rail ${activeView === "performance" ? "active" : ""}`} title="Performance" onClick={() => setActiveView("performance")}><BarChart3 size={19} /><span>Perf</span></button>
+          <button className={`rail-button backups-rail ${activeView === "backups" ? "active" : ""}`} title="Backups" onClick={() => setActiveView("backups")}><Archive size={19} /><span>Backups</span></button>
+          <button className={`rail-button fleet-rail ${activeView === "fleet" ? "active" : ""}`} title="Server Fleet" onClick={() => setActiveView("fleet")}><Globe2 size={19} /><span>Fleet</span></button>
+          <button className={`rail-button git-rail ${activeView === "git" ? "active" : ""}`} title="Git Deployment" onClick={() => setActiveView("git")}><GitBranch size={19} /><span>Git</span></button>
+          <button className={`rail-button database-rail ${activeView === "database" ? "active" : ""}`} title="Database" onClick={() => setActiveView("database")}><Database size={19} /><span>Database</span></button>
+          <button className={`rail-button automation-rail ${activeView === "automation" ? "active" : ""}`} title="Automation" onClick={() => setActiveView("automation")}><Bell size={19} /><span>Auto</span></button>
+          <button className={`rail-button accounts-rail ${activeView === "accounts" ? "active" : ""}`} title="Accounts and Audit" onClick={() => setActiveView("accounts")}><UserCog size={19} /><span>Accounts</span></button>
+          <button className={`rail-button history-rail ${activeView === "history" ? "active" : ""}`} title="Player History" onClick={() => setActiveView("history")}><History size={19} /><span>History</span></button>
+          <button className={`rail-button ai-rail ${activeView === "ai" ? "active" : ""}`} title="WOLFHQ AI" onClick={() => setActiveView("ai")}><Sparkles size={19} /><span>AI</span></button>
+          <button className={`rail-button settings-rail ${activeView === "settings" ? "active" : ""}`} title="Settings" onClick={() => setActiveView("settings")}><Settings2 size={19} /><span>Settings</span></button>
+        </aside>
+
+        {(!project || activeView === "project") && <aside className="explorer">
+          <div className="section-heading">
+            <div><span>{isRemote ? "REMOTE SERVER MATRIX" : "SERVER MATRIX"}</span><strong>{project?.name || "NO PROJECT LINKED"}</strong></div>
+            <button className={busy ? "spinning" : ""} onClick={rescan} disabled={!project}><RefreshCw size={15} /></button>
+          </div>
+          <div className="connect-options">
+            <button className="connect-button" onClick={chooseFolder}>
+              <FolderOpen size={17} />
+              <span>{project && !isRemote ? "SWITCH LOCAL FOLDER" : "LOCAL SERVER"}</span>
+            </button>
+            <button className={`connect-button remote ${isRemote ? "linked" : ""}`} onClick={openRemoteConnections}>
+              <Globe2 size={17} />
+              <span>{isRemote ? "REMOTE CONNECTED" : "REMOTE VPS"}</span>
+            </button>
+          </div>
+          <div className="search-box">
+            <Search size={14} />
+            <input ref={searchRef} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter project files..." />
+            <kbd>CTRL K</kbd>
+          </div>
+          <div className="tree">
+            {project ? project.tree.map((node) => (
+              <TreeNode key={node.path} node={node} filter={filter} onOpen={openFile} selectedPath={activePath} />
+            )) : (
+              <div className="empty-tree">
+                <div className="radar"><span /><span /><span /></div>
+                <strong>Awaiting directory uplink</strong>
+                <p>Select the folder containing your `server.cfg` and resources.</p>
+              </div>
+            )}
+          </div>
+          <div className="explorer-footer">
+            <span><HardDrive size={13} /> {project ? formatBytes(project.stats.bytes) : "--"}</span>
+            <span>{project?.stats.files || 0} FILES</span>
+          </div>
+        </aside>}
+
+        <main className={`main-stage ${focusedView ? "focused-stage" : ""}`}>
+          {!project ? (
+            <section className="landing">
+              <div className="hero-art" />
+              <div className="hero-scan" />
+              <div className="landing-content">
+                <img className="landing-logo" src="./assets/wolfhq-logo.png" alt="WOLFHQ logo" />
+                <div className="eyebrow"><span /> GLOBAL COMMAND SYSTEM READY</div>
+                <h1>YOUR SERVER.<br /><em>FULLY VISIBLE.</em></h1>
+                <p>Connect to a local server or securely manage a VPS in another country through encrypted SSH and SFTP.</p>
+                <div className="landing-actions">
+                  <button className="primary-action" onClick={chooseFolder}>
+                    <FolderOpen size={18} /> LOCAL SERVER <ChevronRight size={17} />
+                  </button>
+                  <button className="primary-action remote-action" onClick={openRemoteConnections}>
+                    <Cloud size={18} /> REMOTE VPS <ChevronRight size={17} />
+                  </button>
+                </div>
+                <div className="feature-chips">
+                  <span><Check size={13} /> SSH ENCRYPTED</span>
+                  <span><Check size={13} /> LIVE EDITOR</span>
+                  <span><Check size={13} /> WORLDWIDE ACCESS</span>
+                </div>
+              </div>
+              <div className="boot-log">
+                <span>01 // Electron secure bridge</span>
+                <span>02 // SSH + SFTP remote transport</span>
+                <span>03 // Tunneled FiveM telemetry</span>
+                <strong>READY FOR UPLINK_</strong>
+              </div>
+            </section>
+          ) : (
+            <>
+              {activeView === "project" && <>
+                <section className="dashboard-head">
+                  <div>
+                    <div className="eyebrow"><span /> ACTIVE SERVER PROFILE</div>
+                    <h2>{project.config.projectName || project.config.hostname || project.name}</h2>
+                    <p>{isRemote ? `ssh://${project.remoteHost} // ${project.rootPath}` : project.rootPath}</p>
+                  </div>
+                  <div className="head-actions">
+                    <button className="secondary-action cyan-action" onClick={() => setModal("announcement")}><Send size={15} /> ANNOUNCEMENT</button>
+                    <button className="secondary-action danger-action" onClick={() => setModal("restart")}><RotateCcw size={15} /> RESTART</button>
+                    <button className="secondary-action" onClick={openFileForge}><FileCode2 size={16} /> NEW SCRIPT</button>
+                    <button className="secondary-action" onClick={() => setModal("resource")}><Plus size={16} /> NEW RESOURCE</button>
+                    <button className="primary-action compact" onClick={rescan}><RefreshCw size={15} /> RESCAN</button>
+                  </div>
+                </section>
+
+                <section className="metrics">
+                  <MetricCard icon={Users} label="CONNECTED PLAYERS" value={`${status.playerCount}/${status.maxPlayers || project.config.maxClients || "--"}`} detail={status.online ? "LIVE TELEMETRY" : "SERVER OFFLINE"} />
+                  <MetricCard icon={Cpu} label="FRAMEWORK" value={project.framework} detail="AUTO-DETECTED" color="violet" />
+                  <MetricCard icon={Box} label="RESOURCES" value={project.stats.resources} detail={`${project.stats.files.toLocaleString()} FILES INDEXED`} color="pink" />
+                  <MetricCard icon={Activity} label="SERVER STATE" value={status.online ? "ONLINE" : "STANDBY"} detail={status.endpoint || endpoint} color={status.online ? "green" : "amber"} />
+                </section>
+              </>}
+
+              {activeView === "project" && <section className="content-grid">
+                <div className="editor-panel panel-corners">
+                  <div className="tabs-bar">
+                    <div className="tabs">
+                      {tabs.length ? tabs.map((tab) => (
+                        <button key={tab.path} className={`tab ${tab.path === activePath ? "active" : ""}`} onClick={() => setActivePath(tab.path)}>
+                          <Code2 size={13} /><span>{tab.name}</span>{tab.dirty && <i />}
+                          <X size={12} onClick={(event) => { event.stopPropagation(); closeTab(tab.path); }} />
+                        </button>
+                      )) : <span className="no-tabs">SELECT A FILE FROM THE MATRIX</span>}
+                    </div>
+                    <button className="save-button" disabled={!activeTab?.dirty} onClick={saveActive}><Save size={15} /> SAVE</button>
+                  </div>
+                  <div className="editor-breadcrumb">
+                    <Braces size={14} />
+                    <span>{activeTab ? activeTab.path.replace(project.rootPath, project.name) : "Editor standing by"}</span>
+                    {activeTab?.dirty && <strong>MODIFIED</strong>}
+                  </div>
+                  <div className="editor-space">
+                    {activeTab ? (
+                      <CodeMirror
+                        value={activeTab.content}
+                        height="100%"
+                        theme="dark"
+                        extensions={languageExtensions(activeTab.path)}
+                        onChange={updateContent}
+                        basicSetup={{ foldGutter: true, highlightActiveLine: true, autocompletion: true }}
+                      />
+                    ) : (
+                      <div className="editor-empty">
+                        <Code2 size={42} />
+                        <strong>CODE MATRIX IDLE</strong>
+                        <p>Open any editable file to inspect and modify it here.</p>
+                        <div className="shortcut"><kbd>CTRL</kbd><span>+</span><kbd>S</kbd><small>TO SAVE</small></div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="status-bar">
+                    <span><Circle size={7} fill="#58ffd1" /> {isRemote ? "SFTP WRITE ACCESS" : "LOCAL WRITE ACCESS"}</span>
+                    <span>{activeTab ? activeTab.content.split("\n").length : 0} LINES</span>
+                    <span>UTF-8</span><span>LF</span>
+                  </div>
+                </div>
+
+                <aside className="intel-panel">
+                  <div className="intel-block panel-corners">
+                    <div className="intel-title"><Network size={16} /><span>LIVE ENDPOINT</span><i className={status.online ? "online" : ""} /></div>
+                    <div className="endpoint-row">
+                      <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
+                      <button onClick={() => refreshStatus(endpoint)}><RefreshCw size={14} /></button>
+                    </div>
+                    <div className="server-orbit">
+                      <div className="orbit orbit-one" /><div className="orbit orbit-two" />
+                      <Server size={31} />
+                      <span className={status.online ? "online" : ""}>{status.online ? "ONLINE" : "OFFLINE"}</span>
+                    </div>
+                    <div className="mini-stats">
+                      <div><span>CPU</span><strong>{status.process ? `${Math.round(status.process.cpu)}%` : "--"}</strong></div>
+                      <div><span>RAM</span><strong>{status.process ? formatBytes(status.process.memoryBytes) : "--"}</strong></div>
+                      <div><span>MAP</span><strong>{status.map || "--"}</strong></div>
+                      <div><span>GAMETYPE</span><strong>{status.gameType || "--"}</strong></div>
+                    </div>
+                  </div>
+                  <div className="intel-block resources-block panel-corners">
+                    <div className="intel-title"><Box size={16} /><span>RESOURCE SIGNALS</span><small>{project.stats.resources}</small></div>
+                    <div className="resource-list">
+                      {resourceNames.map((resource, index) => (
+                        <div key={resource.path}><span>{String(index + 1).padStart(2, "0")}</span><strong>{resource.name}</strong><i /></div>
+                      ))}
+                      {!resourceNames.length && <p>No manifests detected.</p>}
+                    </div>
+                  </div>
+                  <div className="intel-block framework-block panel-corners">
+                    <div><Gauge size={18} /><span>DETECTION CONFIDENCE</span></div>
+                    <strong>{project.framework}</strong>
+                    <div className="confidence"><span style={{ width: project.framework.includes("Standalone") ? "62%" : "94%" }} /></div>
+                    <small>Based on manifests, resource names, and server.cfg signals.</small>
+                  </div>
+                </aside>
+              </section>}
+
+              {activeView === "resources" && (
+                <section className="command-page panel-corners">
+                  <div className="command-page-head">
+                    <div><Box size={20} /><span><strong>RESOURCE REGISTRY</strong><small>All detected FiveM manifests and resource paths</small></span></div>
+                    <div className="resource-page-tools">
+                      <label><Search size={13} /><input placeholder="Search resources..." value={resourceSearch} onChange={(event) => setResourceSearch(event.target.value)} /></label>
+                      <strong>{visibleResources.length}/{project.resources.length} ACTIVE SIGNALS</strong>
+                    </div>
+                  </div>
+                  <div className="resource-grid">
+                    {visibleResources.map((resource, index) => (
+                      <div key={resource.path} className="resource-card managed">
+                        <span>{String(index + 1).padStart(3, "0")}</span>
+                        <Box size={18} />
+                        <div className="resource-card-info">
+                          <strong>{resource.name}</strong>
+                          <small>{resource.path.replace(project.rootPath, project.name)}</small>
+                          <i className={`resource-state ${resourceStateMap[resource.name] === "started" ? "online" : ""}`}>{resourceStateMap[resource.name] || "unknown"}</i>
+                        </div>
+                        <div className="resource-actions">
+                          <button title="Inspect manifest" onClick={() => { openFile({ path: resource.manifest, name: "fxmanifest.lua", editable: true }); setActiveView("project"); }}><Code2 size={13} /></button>
+                          <button title="Start" onClick={() => manageResource(resource, "ensure")}><Play size={13} /></button>
+                          <button title="Stop" onClick={() => manageResource(resource, "stop")}><Square size={12} /></button>
+                          <button title="Restart" onClick={() => manageResource(resource, "restart")}><RotateCcw size={13} /></button>
+                          <button title="Git update" onClick={() => manageResource(resource, "update")}><GitBranch size={13} /></button>
+                          <button className="danger" title="Delete resource folder" onClick={() => deleteResourceFolder(resource)}><Trash2 size={13} /></button>
+                        </div>
+                      </div>
+                    ))}
+                    {!visibleResources.length && <div className="resource-empty"><Search size={34} /><strong>NO MATCHING RESOURCES</strong><p>Try another resource name, path, or state.</p></div>}
+                  </div>
+                </section>
+              )}
+
+              {activeView === "resourceHub" && (
+                <section className="resource-hub panel-corners">
+                  <div className="hub-header">
+                    <img src="./assets/wolfhq-icon.png" alt="" />
+                    <span>
+                      <strong>OFFICIAL RESOURCE HUB</strong>
+                      <small>Live verified repositories from Cfx.re, QBCore, Qbox, and ESX framework organizations</small>
+                    </span>
+                    <div className="hub-header-actions">
+                      <i><ShieldCheck size={14} /> {resourceCatalog.length || "--"} VERIFIED</i>
+                      <button className={catalogLoading ? "spinning" : ""} onClick={() => loadResourceCatalog(true)} disabled={catalogLoading}><RefreshCw size={14} /> REFRESH CATALOG</button>
+                    </div>
+                  </div>
+                  <div className="hub-toolbar">
+                    <label className="hub-search"><Search size={15} /><input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search official resources..." /></label>
+                    <CatalogDropdown label="Framework" value={catalogFramework} options={["Detected", "All", "Standalone", "QBCore", "Qbox", "ESX"]} onChange={setCatalogFramework} />
+                    <CatalogDropdown label="Category" value={catalogCategory} options={catalogCategories} onChange={setCatalogCategory} />
+                    <button className="detected-framework" onClick={() => setCatalogFramework(detectedCatalogFramework)} title={`Show ${detectedCatalogFramework} resources`}>
+                      <Cpu size={15} /><span>DETECTED SERVER</span><strong>{detectedCatalogFramework}</strong><em>USE FILTER</em>
+                    </button>
+                  </div>
+                  <div className="hub-notice">
+                    <PackageCheck size={17} />
+                    <span>WOLFHQ downloads the official Git repository into a framework-specific resource folder. Review each repository's setup, SQL, dependencies, and license before starting it.</span>
+                  </div>
+                  <div className="hub-grid">
+                    {visibleCatalog.map((resource) => (
+                      <article className="hub-card" key={resource.id}>
+                        <div className="hub-card-top">
+                          <span className={`framework-tag ${resource.framework.toLowerCase()}`}>{resource.framework}</span>
+                          <span className="official-tag"><ShieldCheck size={12} /> OFFICIAL</span>
+                        </div>
+                        <div className="hub-card-title"><Box size={22} /><span><strong>{resource.repo}</strong><small>{resource.owner}</small></span></div>
+                        <p>{resource.description}</p>
+                        <div className="hub-card-meta"><span>{resource.category}</span><code>git clone</code></div>
+                        <div className="hub-card-actions">
+                          <button onClick={() => api.openExternal(resource.sourceUrl)}><ExternalLink size={14} /> SOURCE</button>
+                          <button className="install" disabled={Boolean(catalogInstalling)} onClick={() => installCatalogResource(resource)}>
+                            {catalogInstalling === resource.id ? <RefreshCw className="spinning-icon" size={14} /> : <Download size={14} />}
+                            {catalogInstalling === resource.id ? "INSTALLING" : "INSTALL"}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                    {!visibleCatalog.length && <div className="hub-empty"><Search size={34} /><strong>NO MATCHING OFFICIAL RESOURCES</strong><p>Change the framework, category, or search filter.</p></div>}
+                  </div>
+                </section>
+              )}
+
+              {activeView === "antiCheat" && (
+                <section className="anti-cheat-page panel-corners">
+                  <div className="anti-cheat-header">
+                    <div className="anti-cheat-mark"><ShieldAlert size={29} /></div>
+                    <span>
+                      <strong>NEKO ANTI-CHEAT COMMAND MATRIX</strong>
+                      <small>Server protection discovery, provider visibility, player observation, and the future Neko defence engine.</small>
+                    </span>
+                    <div className={`anti-cheat-readiness ${detectedAntiCheats.some((item) => item.status === "enabled") ? "protected" : ""}`}>
+                      <Circle size={8} fill="currentColor" />
+                      <span>{detectedAntiCheats.some((item) => item.status === "enabled") ? "PROTECTION DETECTED" : "NO ACTIVE ENGINE DETECTED"}</span>
+                    </div>
+                  </div>
+
+                  <div className="anti-cheat-toolbar">
+                    <CatalogDropdown label="Displayed protection system" value={antiCheatDisplay} options={antiCheatChoices} onChange={setAntiCheatDisplay} />
+                    <div className="anti-cheat-toolbar-stat"><span>DETECTED</span><strong>{detectedAntiCheats.length}</strong></div>
+                    <div className="anti-cheat-toolbar-stat"><span>ENABLED</span><strong>{detectedAntiCheats.filter((item) => item.status === "enabled").length}</strong></div>
+                    <button className={busy ? "spinning" : ""} onClick={rescan}><RefreshCw size={14} /> RESCAN SERVER</button>
+                  </div>
+
+                  <div className="anti-cheat-body">
+                    <div className="anti-cheat-metrics">
+                      <div><ShieldCheck size={20} /><span>ACTIVE PROVIDER<strong>{selectedAntiCheat?.provider || (nekoSelected ? "Neko Anti-Cheat" : detectedAntiCheats.find((item) => item.status === "enabled")?.provider || "None")}</strong></span></div>
+                      <div><Eye size={20} /><span>OBSERVED PLAYERS<strong>{status.playerCount || 0}</strong></span></div>
+                      <div><AlertTriangle size={20} /><span>LIVE INCIDENTS<strong>0</strong></span></div>
+                      <div><Activity size={20} /><span>TELEMETRY LINK<strong>{nekoSelected ? "NOT DEPLOYED" : selectedAntiCheat ? "ADAPTER NEEDED" : "OFFLINE"}</strong></span></div>
+                    </div>
+
+                    <div className="anti-cheat-grid">
+                      <div className="anti-cheat-panel detected-panel">
+                        <div className="anti-panel-title"><ShieldAlert size={17} /><span><strong>DETECTED PROTECTION</strong><small>Manifest, path, and startup signals found during the server scan</small></span></div>
+                        <div className="detected-ac-list">
+                          {detectedAntiCheats.map((antiCheat) => {
+                            const label = `${antiCheat.provider} // ${antiCheat.resourceName}`;
+                            return (
+                              <button className={antiCheatDisplay === label ? "active" : ""} key={antiCheat.id} onClick={() => setAntiCheatDisplay(label)}>
+                                <div className="ac-provider-icon"><ShieldCheck size={18} /></div>
+                                <span><strong>{antiCheat.provider}</strong><small>{antiCheat.resourceName} // {antiCheat.type}</small></span>
+                                <i className={antiCheat.status}>{antiCheat.status}</i>
+                                <em>{antiCheat.confidence}% MATCH</em>
+                              </button>
+                            );
+                          })}
+                          {!detectedAntiCheats.length && (
+                            <div className="no-ac-detected"><ShieldAlert size={31} /><strong>NO ANTI-CHEAT RESOURCE FOUND</strong><p>WOLFHQ checked resource names, manifests, security folders, and server.cfg startup entries.</p></div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="anti-cheat-panel provider-panel">
+                        <div className="anti-panel-title"><Fingerprint size={17} /><span><strong>PROVIDER INSPECTOR</strong><small>The selected system is displayed here; no server files are changed.</small></span></div>
+                        {nekoSelected ? (
+                          <div className="neko-provider">
+                            <div className="neko-core-orbit"><span /><span /><ShieldAlert size={42} /></div>
+                            <strong>NEKO ANTI-CHEAT</strong>
+                            <small>WOLF STUDIOS DEFENCE PLATFORM</small>
+                            <p>The command interface is ready. The actual client/server detection resource has intentionally not been built or installed yet.</p>
+                            <div className="anti-profile-selector">
+                              {["Monitor", "Balanced", "Strict"].map((profile) => <button className={antiCheatProfile === profile ? "active" : ""} key={profile} onClick={() => setAntiCheatProfile(profile)}>{profile}</button>)}
+                            </div>
+                            <button className="neko-deploy" disabled><LockKeyhole size={15} /> ENGINE NOT BUILT // DEPLOYMENT LOCKED</button>
+                          </div>
+                        ) : selectedAntiCheat ? (
+                          <div className="existing-provider">
+                            <div className="existing-provider-head"><ShieldCheck size={32} /><span><strong>{selectedAntiCheat.provider}</strong><small>{selectedAntiCheat.resourceName}</small></span><i className={selectedAntiCheat.status}>{selectedAntiCheat.status}</i></div>
+                            <dl>
+                              <div><dt>TYPE</dt><dd>{selectedAntiCheat.type.toUpperCase()}</dd></div>
+                              <div><dt>CONFIDENCE</dt><dd>{selectedAntiCheat.confidence}%</dd></div>
+                              <div><dt>RESOURCE PATH</dt><dd>{selectedAntiCheat.path.replace(project.rootPath, project.name)}</dd></div>
+                            </dl>
+                            <div className="ac-evidence">{selectedAntiCheat.evidence.map((evidence) => <span key={evidence}><Check size={12} /> {evidence}</span>)}</div>
+                            <button onClick={() => { openFile({ path: selectedAntiCheat.manifest, name: "fxmanifest.lua", editable: true }); setActiveView("project"); }}><Code2 size={14} /> INSPECT MANIFEST</button>
+                          </div>
+                        ) : (
+                          <div className="provider-overview">
+                            <img src="./assets/wolfhq-icon.png" alt="" />
+                            <strong>PROTECTION OVERVIEW</strong>
+                            <p>Select a detected provider to inspect it, or choose Neko Anti-Cheat to preview the future protection console.</p>
+                            <button onClick={() => setAntiCheatDisplay("Neko Anti-Cheat")}><ShieldAlert size={14} /> PREVIEW NEKO ANTI-CHEAT</button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="anti-cheat-panel modules-panel">
+                        <div className="anti-panel-title"><Activity size={17} /><span><strong>DEFENCE MODULES</strong><small>Planned Neko engine coverage; display only until the resource is built</small></span></div>
+                        <div className="anti-module-grid">
+                          {ANTI_CHEAT_MODULES.map(({ name, detail, icon: Icon }) => <div key={name}><Icon size={17} /><span><strong>{name}</strong><small>{detail}</small></span><i>PLANNED</i></div>)}
+                        </div>
+                      </div>
+
+                      <div className="anti-cheat-panel activity-panel">
+                        <div className="anti-panel-title"><Eye size={17} /><span><strong>PLAYER OBSERVATION</strong><small>Connected players now; behavioural telemetry requires an engine adapter</small></span></div>
+                        <div className="anti-player-list">
+                          {(status.players || []).slice(0, 8).map((player) => <div key={`${player.id}-${player.name}`}><span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms</small><em>NO EVENT STREAM</em></div>)}
+                          {!status.players?.length && <div className="anti-empty-feed"><Eye size={28} /><strong>NO PLAYERS TO OBSERVE</strong><p>Connected players will appear here. Detailed actions will require the future Neko telemetry resource or a provider adapter.</p></div>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeView === "players" && (
+                <section className="command-page panel-corners">
+                  <div className="command-page-head">
+                    <div><Users size={20} /><span><strong>LIVE PLAYER MATRIX</strong><small>Direct data from the active FiveM players endpoint</small></span></div>
+                    <strong>{status.playerCount}/{status.maxPlayers || project.config.maxClients || "--"} CONNECTED</strong>
+                  </div>
+                  <div className="player-table">
+                    <div className="player-table-head admin"><span>ID</span><span>PLAYER / IDENTIFIER</span><span>PING</span><span>ACTIONS</span></div>
+                    {playerDetails.map((player) => (
+                      <div className="player-row" key={`${player.id}-${player.name}`}>
+                        <span>#{player.id}</span>
+                        <strong><i /><span>{player.name || "Unknown player"}<small>{player.identifiers?.[0] || player.endpoint || "Protected"}</small></span></strong>
+                        <span>{player.ping ?? "--"} ms</span>
+                        <div className="player-actions">
+                          <button onClick={() => editPlayerNote(player)}><FileCode2 size={13} /> NOTE</button>
+                          <button onClick={() => administerPlayer(player, "kick")}><UserX size={13} /> KICK</button>
+                          <button className="danger" onClick={() => administerPlayer(player, "ban")}><Ban size={13} /> BAN</button>
+                        </div>
+                      </div>
+                    ))}
+                    {!playerDetails.length && (
+                      <div className="page-empty"><Wifi size={38} /><strong>NO PLAYERS CONNECTED</strong><p>The list refreshes from `{status.endpoint || endpoint}/players.json` every four seconds.</p></div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {activeView === "console" && (
+                <section className="command-page console-page panel-corners">
+                  <div className="command-page-head">
+                    <div><Terminal size={20} /><span><strong>SERVER CONSOLE FEED</strong><small>{logs.path || "Searching for the latest FXServer log"}</small></span></div>
+                    <div className="console-tools">
+                      <label><Search size={13} /><input placeholder="Filter logs..." value={consoleFilter} onChange={(event) => setConsoleFilter(event.target.value)} /></label>
+                      <button onClick={async () => setLogs(await api.getServerLogs())}><RefreshCw size={15} /> REFRESH</button>
+                    </div>
+                  </div>
+                  <div className="console-output">
+                    {visibleLogs.length ? visibleLogs.map((line, index) => (
+                      <div key={`${index}-${line.slice(0, 20)}`} className={/error|exception|failed|fatal/i.test(line) ? "error" : /warn/i.test(line) ? "warn" : ""}>{line}</div>
+                    )) : "Awaiting log data..."}
+                  </div>
+                  <form className="console-command" onSubmit={submitConsoleCommand}>
+                    <Terminal size={15} />
+                    <input placeholder="Execute a FiveM console command..." value={consoleCommand} onChange={(event) => setConsoleCommand(event.target.value)} />
+                    <button type="submit" disabled={!consoleCommand.trim()}><Send size={14} /> EXECUTE</button>
+                  </form>
+                </section>
+              )}
+
+              {OPERATIONS_VIEWS.has(activeView) && (
+                <section className="ops-page module-page">
+                  <div className={`ops-card performance-card panel-corners ${activeView !== "performance" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><BarChart3 size={18} /><span><strong>PERFORMANCE HISTORY</strong><small>CPU, memory, players, uptime, and crash signals retained locally</small></span></div>
+                    <div className="spark-grid">
+                      <SparkChart label="CPU %" values={opsData.metrics.map((item) => item.cpu)} />
+                      <SparkChart label="RAM MB" color="#9d73ff" values={opsData.metrics.map((item) => Math.round(item.memoryBytes / 1024 / 1024))} />
+                      <SparkChart label="PLAYERS" color="#58ffd1" values={opsData.metrics.map((item) => item.players)} />
+                    </div>
+                    <div className="ops-stats">
+                      <span>UPTIME <strong>{status.process?.started ? `${Math.max(0, Math.floor((Date.now() - new Date(status.process.started).getTime()) / 3600000))}h` : "--"}</strong></span>
+                      <span>CRASH SAMPLES <strong>{opsData.metrics.filter((item, index, all) => index > 0 && all[index - 1].online && !item.online).length}</strong></span>
+                      <span>HISTORY <strong>{opsData.metrics.length}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className={`ops-card backup-card panel-corners ${activeView !== "backups" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><Archive size={18} /><span><strong>AUTOMATIC BACKUPS</strong><small>Restore points are also created before the first file edit and Git deployment</small></span></div>
+                    <div className="ops-actions">
+                      <button onClick={createBackupNow} disabled={busy}><Archive size={14} /> CREATE RESTORE POINT</button>
+                      <select value={opsSettings.backupSchedule || "manual"} onChange={(event) => setOpsSettings({ ...opsSettings, backupSchedule: event.target.value })}>
+                        <option value="manual">Manual only</option><option value="hourly">Every hour</option><option value="daily">Every day</option>
+                      </select>
+                    </div>
+                    <div className="backup-list">
+                      {backups.slice(0, 6).map((backup) => (
+                        <div key={backup.path}><Archive size={13} /><span><strong>{backup.name}</strong><small>{new Date(backup.createdAt).toLocaleString()} // {formatBytes(backup.size)}</small></span><button onClick={() => restoreBackupNow(backup)}>RESTORE</button></div>
+                      ))}
+                      {!backups.length && <p>No restore points created yet.</p>}
+                    </div>
+                  </div>
+
+                  <div className={`ops-card fleet-card panel-corners ${activeView !== "fleet" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><Globe2 size={18} /><span><strong>MULTI-SERVER FLEET</strong><small>Saved VPS profiles and the active encrypted connection</small></span></div>
+                    <div className="fleet-list">
+                      {fleet.map((server) => (
+                        <button key={server.id} className={server.active ? "active" : ""} onClick={openRemoteConnections}>
+                          <Server size={15} /><span><strong>{server.name}</strong><small>{server.host}:{server.port}</small></span><i>{server.active ? "CONNECTED" : "SAVED"}</i>
+                        </button>
+                      ))}
+                      {!fleet.length && <div className="compact-empty">No saved VPS profiles.</div>}
+                    </div>
+                  </div>
+
+                  <div className={`ops-card git-card panel-corners ${activeView !== "git" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><GitBranch size={18} /><span><strong>GIT DEPLOYMENT</strong><small>Status, fast-forward deployment, and rollback with a pre-deploy backup</small></span></div>
+                    <select value={gitTarget} onChange={(event) => setGitTarget(event.target.value)}>
+                      <option value={project.rootPath}>Server root</option>
+                      {project.resources.map((resource) => <option key={resource.path} value={resource.path}>{resource.name}</option>)}
+                    </select>
+                    <div className="ops-actions">
+                      <button onClick={() => runGit("status")}><Search size={13} /> STATUS</button>
+                      <button onClick={() => runGit("pull")}><GitBranch size={13} /> DEPLOY PULL</button>
+                      <button className="danger" onClick={() => runGit("rollback")}><History size={13} /> ROLLBACK</button>
+                    </div>
+                    <pre className="git-output">{gitOutput}</pre>
+                  </div>
+
+                  <div className={`ops-card database-card panel-corners ${activeView !== "database" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><Database size={18} /><span><strong>DATABASE MANAGER</strong><small>MySQL browsing through the SSH tunnel with parameterized single-cell edits</small></span></div>
+                    <div className="db-connect">
+                      <input placeholder="Host" value={dbConfig.host} onChange={(event) => setDbConfig({ ...dbConfig, host: event.target.value })} />
+                      <input type="number" placeholder="Port" value={dbConfig.port} onChange={(event) => setDbConfig({ ...dbConfig, port: Number(event.target.value) })} />
+                      <input placeholder="User" value={dbConfig.user} onChange={(event) => setDbConfig({ ...dbConfig, user: event.target.value })} />
+                      <input type="password" placeholder="Password" value={dbConfig.password} onChange={(event) => setDbConfig({ ...dbConfig, password: event.target.value })} />
+                      <input placeholder="Database" value={dbConfig.database} onChange={(event) => setDbConfig({ ...dbConfig, database: event.target.value })} />
+                      <button onClick={connectDatabase}><Database size={13} /> CONNECT</button>
+                    </div>
+                    <div className="db-browser">
+                      <aside>{dbTables.map((table) => <button key={table} className={dbTable === table ? "active" : ""} onClick={() => loadDatabaseTable(table)}>{table}</button>)}</aside>
+                      <div className="db-table-wrap">
+                        {dbRows.rows.length ? (
+                          <table><thead><tr>{dbRows.columns.slice(0, 8).map((column) => <th key={column.Field}>{column.Field}</th>)}</tr></thead>
+                            <tbody>{dbRows.rows.slice(0, 30).map((row, rowIndex) => <tr key={rowIndex}>{dbRows.columns.slice(0, 8).map((column) => <td key={column.Field} onDoubleClick={() => editDatabaseCell(row, column.Field)} title="Double-click to edit">{row[column.Field] == null ? "NULL" : String(row[column.Field])}</td>)}</tr>)}</tbody>
+                          </table>
+                        ) : <div className="compact-empty">Connect and select a table. Double-click a cell to edit it safely.</div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`ops-card crash-card panel-corners ${activeView !== "automation" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><Bell size={18} /><span><strong>CRASH DETECTION</strong><small>Offline detection, optional restart command, and Discord webhook alerts</small></span></div>
+                    <label className="ops-check"><input type="checkbox" checked={Boolean(opsSettings.crashDetection)} onChange={(event) => setOpsSettings({ ...opsSettings, crashDetection: event.target.checked })} /> Monitor FXServer state</label>
+                    <label className="ops-check"><input type="checkbox" checked={Boolean(opsSettings.autoRestart)} onChange={(event) => setOpsSettings({ ...opsSettings, autoRestart: event.target.checked })} /> Execute restart command after a crash</label>
+                    <input placeholder="Restart command, e.g. powershell Start-Service FiveM" value={opsSettings.restartCommand || ""} onChange={(event) => setOpsSettings({ ...opsSettings, restartCommand: event.target.value })} />
+                    <input type="password" placeholder="Discord webhook URL (kept on this PC)" value={opsSettings.discordWebhook || ""} onChange={(event) => setOpsSettings({ ...opsSettings, discordWebhook: event.target.value })} />
+                    <button onClick={saveOpsSettings}><Save size={13} /> SAVE AUTOMATION</button>
+                  </div>
+
+                  <div className={`ops-card accounts-card panel-corners ${activeView !== "accounts" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><UserCog size={18} /><span><strong>WOLFHQ ACCOUNTS</strong><small>Owner, admin, and developer permissions with local audit identity</small></span></div>
+                    <div className="current-account"><ShieldCheck size={15} /><span>ACTIVE ACCOUNT</span><strong>{opsData.current?.username || "Owner"} // {opsData.current?.role || "owner"}</strong></div>
+                    <form className="account-form" onSubmit={createOpsAccount}>
+                      <input placeholder="New username" value={accountDraft.username} onChange={(event) => setAccountDraft({ ...accountDraft, username: event.target.value })} />
+                      <select value={accountDraft.role} onChange={(event) => setAccountDraft({ ...accountDraft, role: event.target.value })}><option value="developer">Developer</option><option value="admin">Admin</option><option value="owner">Owner</option></select>
+                      <input type="password" placeholder="Password" value={accountDraft.password} onChange={(event) => setAccountDraft({ ...accountDraft, password: event.target.value })} />
+                      <button type="submit"><Plus size={13} /> ADD</button>
+                    </form>
+                    <form className="account-form login" onSubmit={loginOpsAccount}>
+                      <select value={accountLogin.id} onChange={(event) => setAccountLogin({ ...accountLogin, id: event.target.value })}><option value="">Switch account...</option>{opsData.accounts.map((account) => <option key={account.id} value={account.id}>{account.username} // {account.role}</option>)}</select>
+                      <input type="password" placeholder="Account password" value={accountLogin.password} onChange={(event) => setAccountLogin({ ...accountLogin, password: event.target.value })} />
+                      <button type="submit"><KeyRound size={13} /> LOGIN</button>
+                    </form>
+                    <div className="account-list">
+                      {opsData.accounts.map((account) => (
+                        <div key={account.id}><UserCog size={13} /><span><strong>{account.username}</strong><small>{account.role}</small></span>{account.id !== "owner" && account.id !== opsData.current?.id && <button onClick={() => deleteOpsAccount(account)}><Trash2 size={12} /></button>}</div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={`ops-card history-card panel-corners ${activeView !== "history" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><Users size={18} /><span><strong>PLAYER CONNECTION HISTORY</strong><small>Last seen names and identifiers retained on this PC</small></span></div>
+                    <div className="history-list">
+                      {opsData.playerHistory.slice(0, 20).map((entry) => <div key={entry.key}><span><strong>{entry.name}</strong><small>{entry.identifiers?.[0] || entry.key}</small></span><i>{new Date(entry.lastSeen).toLocaleString()}</i></div>)}
+                      {!opsData.playerHistory.length && <p>No player connections have been recorded yet.</p>}
+                    </div>
+                  </div>
+
+                  <div className={`ops-card audit-card panel-corners ${activeView !== "accounts" ? "module-hidden" : ""}`}>
+                    <div className="ops-title"><History size={18} /><span><strong>AUDIT LOG</strong><small>Who performed each sensitive server action and when</small></span></div>
+                    <div className="audit-list">{opsData.audit.slice(0, 20).map((entry) => <div key={entry.id}><span>{new Date(entry.at).toLocaleString()}</span><strong>{entry.account}</strong><code>{entry.action}</code></div>)}{!opsData.audit.length && <p>No administrative actions recorded yet.</p>}</div>
+                  </div>
+
+                  <div className={`ops-card ai-card panel-corners ${activeView !== "ai" ? "module-hidden" : ""}`}>
+                    <div className="ai-header">
+                      <div className="ai-orb"><img src="./assets/wolfhq-icon.png" alt="" /></div>
+                      <span><strong>WOLFHQ AI CODE MATRIX</strong><small>Search the full indexed server, reason over relevant files, review complete edits, then apply with an automatic restore point.</small></span>
+                      <div className="ai-header-actions">
+                        <button type="button" onClick={startNewAiChat} disabled={aiBusy}><Plus size={13} /> NEW CHAT</button>
+                        <i>{aiSettings.hasApiKey ? "PROVIDER ARMED" : "SETUP REQUIRED"}</i>
+                      </div>
+                    </div>
+
+                    <div className="ai-layout">
+                      <aside className="ai-config">
+                        <div className="ai-section-title"><KeyRound size={14} /> PROVIDER VAULT</div>
+                        <label>Provider<select value={aiSettings.provider} onChange={(event) => changeAiProvider(event.target.value)}>
+                          <option value="anthropic">Anthropic Claude</option>
+                          <option value="openai-compatible">OpenAI-compatible</option>
+                        </select></label>
+                        <label>Model<select value={aiSettings.model} onChange={(event) => changeAiModel(event.target.value)}>
+                          {selectableAiModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+                        </select></label>
+                        <div className="ai-model-source"><Circle size={7} fill="currentColor" /> {aiModelsLive ? "LIVE MODELS FROM YOUR PROVIDER" : "CURRENT MODEL CATALOG"}</div>
+                        <label>API endpoint<input value={aiSettings.endpoint} onChange={(event) => setAiSettings({ ...aiSettings, endpoint: event.target.value })} /></label>
+                        <label>API key<input type="password" placeholder={aiSettings.hasApiKey ? "Encrypted key saved - leave blank to keep it" : "Enter provider API key"} value={aiSettings.apiKey} onChange={(event) => setAiSettings({ ...aiSettings, apiKey: event.target.value })} /></label>
+                        <button onClick={saveAiProvider}><ShieldCheck size={13} /> ENCRYPT AND SAVE</button>
+                        <div className="ai-security"><LockKeyhole size={14} /><span>Keys are encrypted by Windows. Common credentials and tokens are redacted before file context is sent.</span></div>
+
+                        <div className="ai-section-title search-title"><Search size={14} /> FILE INTELLIGENCE</div>
+                        <div className="ai-search">
+                          <input placeholder="Search paths and file contents..." value={aiSearchQuery} onChange={(event) => setAiSearchQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && searchServerWithAi()} />
+                          <button onClick={searchServerWithAi} disabled={aiBusy}><Search size={13} /></button>
+                        </div>
+                        <div className="ai-index-count">{aiSearch.indexedFiles.toLocaleString()} EDITABLE FILES INDEXED</div>
+                        <div className="ai-search-results">
+                          {aiSearch.results.slice(0, 12).map((result) => <button key={result.path} onClick={() => { openFile({ path: result.path, name: result.relativePath.split(/[\\/]/).pop(), editable: true }); setActiveView("project"); }}><FileCode2 size={12} /><span><strong>{result.relativePath}</strong><small>{result.snippet || "Indexed path match"}</small></span></button>)}
+                        </div>
+                      </aside>
+
+                      <main className="ai-workbench">
+                        <div className="ai-section-title"><Sparkles size={14} /> LIVE SERVER ASSISTANT</div>
+                        <div className="ai-chat-feed" ref={aiChatRef}>
+                          {!aiMessages.length && (
+                            <div className="ai-chat-welcome">
+                              <Sparkles size={38} />
+                              <strong>ASK WOLFHQ ANYTHING ABOUT THIS SERVER</strong>
+                              <p>I can inspect the indexed files, explain how the server works, find problems, and prepare reviewed edits. Nothing is saved until you approve it.</p>
+                            </div>
+                          )}
+                          {aiMessages.map((message) => (
+                            <div key={message.id} className={`ai-message ${message.role}`}>
+                              <div className="ai-message-role">{message.role === "user" ? "YOU" : message.role === "error" ? "SYSTEM ERROR" : `WOLFHQ AI // ${message.model}`}</div>
+                              <div className="ai-message-text">{message.text}</div>
+                            </div>
+                          ))}
+                          {aiBusy && <div className="ai-message assistant thinking"><div className="ai-message-role">WOLFHQ AI</div><div className="ai-message-text"><RefreshCw size={16} /> Reading relevant server files and preparing an answer...</div></div>}
+
+                          {aiProposal?.files.length > 0 && (
+                            <div className="ai-review-panel">
+                              <div className="ai-summary"><Check size={17} /><span><strong>{aiProposal.summary}</strong><small>{aiProposal.indexedFiles} paths searched // {aiProposal.contextFiles} relevant files analyzed</small></span></div>
+                              <div className="ai-change-list">
+                                {aiProposal.files.map((file) => (
+                                  <div key={file.path} className={aiSelected[file.path] ? "selected" : ""}>
+                                    <label><input type="checkbox" checked={Boolean(aiSelected[file.path])} onChange={(event) => setAiSelected({ ...aiSelected, [file.path]: event.target.checked })} /><span /></label>
+                                    <div className="ai-change-info"><strong>{file.path.replace(project.rootPath, project.name)}</strong><small>{file.explanation}</small></div>
+                                    <pre>{file.content.split("\n").slice(0, 18).join("\n")}{file.content.split("\n").length > 18 ? "\n..." : ""}</pre>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="ai-apply-bar">
+                                <span>{Object.values(aiSelected).filter(Boolean).length} FILES SELECTED</span>
+                                <button onClick={() => setAiProposal(null)}><X size={13} /> DISCARD EDITS</button>
+                                <button className="apply" onClick={applySelectedAiChanges} disabled={aiBusy || !Object.values(aiSelected).some(Boolean)}><Save size={13} /> BACKUP AND APPLY</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="ai-composer">
+                          <textarea
+                            autoFocus
+                            placeholder="Ask about the server or describe an edit. Press Enter to send, Shift+Enter for a new line."
+                            value={aiPrompt}
+                            onChange={(event) => setAiPrompt(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && !event.shiftKey) {
+                                event.preventDefault();
+                                generateAiProposal();
+                              }
+                            }}
+                          />
+                          <button onClick={generateAiProposal} disabled={aiBusy || aiPrompt.trim().length < 2}><Send size={17} /> SEND</button>
+                        </div>
+                        <div className="ai-composer-meta"><span>ENTER TO SEND // SHIFT+ENTER FOR NEW LINE</span><span>{project.stats.files.toLocaleString()} FILES // {project.stats.resources} RESOURCES</span></div>
+                      </main>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeView === "settings" && (
+                <section className="settings-grid">
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><Network size={18} /><span><strong>TELEMETRY ENDPOINT</strong><small>WOLFHQ automatically falls back to the port detected in server.cfg.</small></span></div>
+                    <label>{isRemote ? "Encrypted tunnel route" : "FiveM HTTP endpoint"}<input readOnly={isRemote} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} /></label>
+                    <button className="primary-action compact" onClick={() => refreshStatus(endpoint)}><RefreshCw size={15} /> TEST CONNECTION</button>
+                    <div className={`connection-result ${status.online ? "online" : ""}`}><Circle size={8} fill="currentColor" /> {status.online ? `Linked to ${status.endpoint}` : status.error || "Not connected"}</div>
+                  </div>
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><Globe2 size={18} /><span><strong>SERVER TRANSPORT</strong><small>Remote mode keeps files, telemetry, and controls inside one SSH session.</small></span></div>
+                    <div className="runtime-grid">
+                      <div><span>MODE</span><strong>{isRemote ? "REMOTE SSH" : "LOCAL PC"}</strong></div>
+                      <div><span>HOST</span><strong>{project.remoteHost || "THIS DEVICE"}</strong></div>
+                      <div><span>FILES</span><strong>{isRemote ? "SFTP" : "DIRECT"}</strong></div>
+                      <div><span>CONTROL</span><strong>{isRemote ? "SSH TUNNEL" : "LOOPBACK"}</strong></div>
+                    </div>
+                    <button className="secondary-action" onClick={isRemote ? openRemoteConnections : openRemoteConnections}><KeyRound size={15} /> MANAGE REMOTE PROFILES</button>
+                  </div>
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><ShieldCheck size={18} /><span><strong>WOLFHQ CONTROL BRIDGE</strong><small>Required for announcements and managed server restarts.</small></span></div>
+                    <div className="bridge-state">
+                      <span className={controlStatus.running ? "online" : ""}><Circle size={8} fill="currentColor" /> {controlStatus.running ? "RUNNING" : controlStatus.installed ? "INSTALLED / RESTART REQUIRED" : "NOT INSTALLED"}</span>
+                    </div>
+                    <button className="secondary-action" onClick={installBridge}><ShieldCheck size={15} /> INSTALL / REPAIR BRIDGE</button>
+                  </div>
+                  <div className="settings-card updater-card panel-corners">
+                    <div className="settings-title"><Download size={18} /><span><strong>GITHUB AUTO-UPDATER</strong><small>Checks your GitHub Releases channel and downloads the latest installer asset.</small></span></div>
+                    <label>GitHub release repo<input placeholder="owner/repo or https://github.com/owner/repo" value={updater.settings.repo} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, repo: event.target.value } }))} /></label>
+                    <label className="ops-check"><input type="checkbox" checked={Boolean(updater.settings.checkOnStartup)} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, checkOnStartup: event.target.checked } }))} /> Check for updates when WOLFHQ starts</label>
+                    <label className="ops-check"><input type="checkbox" checked={Boolean(updater.settings.includePrerelease)} onChange={(event) => setUpdater((current) => ({ ...current, settings: { ...current.settings, includePrerelease: event.target.checked } }))} /> Include pre-release builds</label>
+                    <div className={`updater-state ${updater.latest?.available ? "available" : ""}`}>
+                      <Circle size={8} fill="currentColor" />
+                      <span>{updater.status}</span>
+                    </div>
+                    {updater.latest && (
+                      <div className="updater-release">
+                        <span>CURRENT {updater.latest.currentVersion}</span>
+                        <strong>LATEST {updater.latest.latestVersion}</strong>
+                        <small>{updater.latest.assets?.length || 0} DOWNLOAD ASSETS</small>
+                      </div>
+                    )}
+                    <div className="updater-actions">
+                      <button className="secondary-action" onClick={saveUpdaterSettings}><Save size={13} /> SAVE CHANNEL</button>
+                      <button className={updater.checking ? "secondary-action spinning" : "secondary-action"} onClick={checkAppUpdate} disabled={updater.checking}><RefreshCw size={13} /> CHECK</button>
+                      <button className={updater.downloading ? "primary-action compact spinning" : "primary-action compact"} onClick={downloadAppUpdate} disabled={updater.downloading}><Download size={13} /> DOWNLOAD LATEST</button>
+                    </div>
+                  </div>
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><Cpu size={18} /><span><strong>RUNTIME PROCESS</strong><small>Metrics are linked to the process owning the live FiveM port.</small></span></div>
+                    <div className="runtime-grid">
+                      <div><span>PID</span><strong>{status.process?.pid || "--"}</strong></div>
+                      <div><span>CPU</span><strong>{status.process ? `${Math.round(status.process.cpu)}%` : "--"}</strong></div>
+                      <div><span>RAM</span><strong>{status.process ? formatBytes(status.process.memoryBytes) : "--"}</strong></div>
+                      <div><span>STARTED</span><strong>{status.process?.started ? new Date(status.process.started).toLocaleTimeString() : "--"}</strong></div>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+        </main>
+      </div>
+
+      <footer className="copyright-footer">
+        <img src="./assets/wolfhq-icon.png" alt="" />
+        <span>© {new Date().getFullYear()} WOLF STUDIOS INC. ALL RIGHTS RESERVED.</span>
+        <i>WOLFHQ // SECURE COMMAND SYSTEM</i>
+      </footer>
+
+      {modal === "remote" && (
+        <Modal title="REMOTE VPS CONNECTION" onClose={() => { setModal(null); setRemoteTrust(null); }}>
+          <form className="resource-form remote-form" onSubmit={connectRemote}>
+            <div className="control-notice"><LockKeyhole size={17} /><span>WOLFHQ uses SSH/SFTP and tunnels FiveM traffic through SSH. You do not need to expose your server files or control bridge publicly.</span></div>
+            <div className="profile-picker">
+              <label>Saved profile<select value={remoteDraft.id} onChange={(event) => loadRemoteProfile(event.target.value)}>
+                <option value="">New remote server</option>
+                {remoteProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} // {profile.host}</option>)}
+              </select></label>
+              {remoteDraft.id && <button type="button" className="icon-danger" title="Delete profile" onClick={deleteRemoteProfile}><Trash2 size={16} /></button>}
+            </div>
+            <div className="form-row">
+              <label>Profile name<input value={remoteDraft.name} onChange={(event) => setRemoteDraft({ ...remoteDraft, name: event.target.value })} /></label>
+              <label>SSH host or IP<input placeholder="203.0.113.20" value={remoteDraft.host} onChange={(event) => setRemoteDraft({ ...remoteDraft, host: event.target.value })} /></label>
+            </div>
+            <div className="form-row three">
+              <label>SSH port<input type="number" min="1" max="65535" value={remoteDraft.port} onChange={(event) => setRemoteDraft({ ...remoteDraft, port: Number(event.target.value) })} /></label>
+              <label>Username<input value={remoteDraft.username} onChange={(event) => setRemoteDraft({ ...remoteDraft, username: event.target.value })} /></label>
+              <label>FiveM port<input type="number" min="1" max="65535" value={remoteDraft.fiveMPort} onChange={(event) => setRemoteDraft({ ...remoteDraft, fiveMPort: Number(event.target.value) })} /></label>
+            </div>
+            <label>Server root path<input placeholder="/home/fivem/server or C:\FiveM\server" value={remoteDraft.rootPath} onChange={(event) => setRemoteDraft({ ...remoteDraft, rootPath: event.target.value })} /></label>
+            <div className="auth-selector">
+              <button type="button" className={remoteDraft.authType === "password" ? "active" : ""} onClick={() => setRemoteDraft({ ...remoteDraft, authType: "password" })}><LockKeyhole size={15} /> PASSWORD</button>
+              <button type="button" className={remoteDraft.authType === "key" ? "active" : ""} onClick={() => setRemoteDraft({ ...remoteDraft, authType: "key" })}><KeyRound size={15} /> PRIVATE KEY</button>
+            </div>
+            {remoteDraft.authType === "key" && (
+              <div className="key-picker">
+                <label>Private key file<input readOnly placeholder="Select an OpenSSH private key..." value={remoteDraft.privateKeyPath} /></label>
+                <button type="button" onClick={chooseRemoteKey}>BROWSE</button>
+              </div>
+            )}
+            <label>{remoteDraft.authType === "key" ? "Key passphrase (leave blank if none)" : "SSH password"}
+              <input type="password" placeholder={remoteDraft.hasSavedSecret && !remoteDraft.secret ? "Saved securely by Windows" : ""} value={remoteDraft.secret} onChange={(event) => setRemoteDraft({ ...remoteDraft, secret: event.target.value })} />
+            </label>
+            <label className="remember-secret"><input type="checkbox" checked={remoteDraft.rememberSecret} onChange={(event) => setRemoteDraft({ ...remoteDraft, rememberSecret: event.target.checked })} /><span /> Encrypt and remember credentials on this PC</label>
+            <button className="primary-action form-submit" type="submit" disabled={busy}><Globe2 size={16} /> {busy ? "CONNECTING..." : "CONNECT REMOTE SERVER"}</button>
+          </form>
+        </Modal>
+      )}
+      {modal === "trust" && remoteTrust && (
+        <Modal title={remoteTrust.changed ? "SSH HOST KEY CHANGED" : "TRUST SSH HOST"} onClose={() => {
+          if (busy) return;
+          setModal("remote");
+          setRemoteTrust(null);
+          setRemoteConnectError("");
+          setRemoteConnectMessage("");
+        }}>
+          <div className="trust-panel">
+            <ShieldCheck size={34} className={busy ? "trust-pulse" : ""} />
+            <strong>{remoteTrust.changed ? "THE SERVER IDENTITY HAS CHANGED" : "VERIFY THIS SERVER IDENTITY"}</strong>
+            <p>{remoteTrust.changed ? "Only continue if your VPS provider confirms the SSH host key was changed. An unexpected change can indicate an attack." : "Compare this fingerprint with the SSH fingerprint shown by your VPS provider before trusting it."}</p>
+            <code>{remoteTrust.fingerprint}</code>
+            {remoteConnectMessage && <div className="trust-status"><RefreshCw size={14} /> {remoteConnectMessage}</div>}
+            {remoteConnectError && <div className="trust-error"><X size={14} /> {remoteConnectError}</div>}
+            <div className="trust-actions">
+              <button className="secondary-action" disabled={busy} onClick={() => {
+                setModal("remote");
+                setRemoteTrust(null);
+                setRemoteConnectError("");
+                setRemoteConnectMessage("");
+              }}>CANCEL</button>
+              <button className={`primary-action compact ${busy ? "spinning" : ""}`} disabled={busy} onClick={() => connectRemote(null, remoteTrust.fingerprint)}>
+                {busy ? <RefreshCw size={15} /> : <ShieldCheck size={15} />} {busy ? "CONNECTING..." : "TRUST AND CONNECT"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {modal === "resource" && (
+        <Modal title="FORGE NEW RESOURCE" onClose={() => setModal(null)}>
+          <form className="resource-form" onSubmit={createResource}>
+            <label>Resource ID<input value={resourceDraft.name} onChange={(e) => setResourceDraft({ ...resourceDraft, name: e.target.value })} /></label>
+            <label>Description<input value={resourceDraft.description} onChange={(e) => setResourceDraft({ ...resourceDraft, description: e.target.value })} /></label>
+            <div className="form-row">
+              <label>Author<input value={resourceDraft.author} onChange={(e) => setResourceDraft({ ...resourceDraft, author: e.target.value })} /></label>
+              <label>Framework<select value={resourceDraft.framework} onChange={(e) => setResourceDraft({ ...resourceDraft, framework: e.target.value })}>
+                <option>Standalone</option><option>QBCore</option><option>Qbox</option><option>ESX</option>
+              </select></label>
+            </div>
+            <div className="switches">
+              <label><input type="checkbox" checked={resourceDraft.includeClient} onChange={(e) => setResourceDraft({ ...resourceDraft, includeClient: e.target.checked })} /><span /> Client script</label>
+              <label><input type="checkbox" checked={resourceDraft.includeServer} onChange={(e) => setResourceDraft({ ...resourceDraft, includeServer: e.target.checked })} /><span /> Server script</label>
+            </div>
+            <div className="manifest-preview">
+              <Terminal size={14} /><code>fxmanifest.lua + config.lua {resourceDraft.includeClient && "+ client.lua"} {resourceDraft.includeServer && "+ server.lua"}</code>
+            </div>
+            <button className="primary-action form-submit" type="submit"><Zap size={16} /> CREATE RESOURCE</button>
+          </form>
+        </Modal>
+      )}
+      {modal === "file" && (
+        <Modal title="FORGE SCRIPT FILE" onClose={() => setModal(null)}>
+          <form className="resource-form" onSubmit={createScriptFile}>
+            <label>File name<input value={fileDraft.name} onChange={(e) => setFileDraft({ ...fileDraft, name: e.target.value })} /></label>
+            <label>Target resource<select value={fileDraft.parentPath} onChange={(e) => setFileDraft({ ...fileDraft, parentPath: e.target.value })}>
+              <option value={project.rootPath}>Server root</option>
+              {project.resources.map((resource) => <option key={resource.path} value={resource.path}>{resource.name}</option>)}
+            </select></label>
+            <label>Starter code<textarea value={fileDraft.content} onChange={(e) => setFileDraft({ ...fileDraft, content: e.target.value })} /></label>
+            <button className="primary-action form-submit" type="submit"><FileCode2 size={16} /> CREATE AND OPEN</button>
+          </form>
+        </Modal>
+      )}
+      {modal === "announcement" && (
+        <Modal title="SERVER ANNOUNCEMENT" onClose={() => setModal(null)}>
+          <form className="resource-form" onSubmit={submitAnnouncement}>
+            <div className="control-notice"><Send size={17} /><span>This message will be broadcast to every player currently connected to WOLFHQ.</span></div>
+            <label>Announcement<textarea autoFocus maxLength={500} placeholder="Server announcement..." value={announcement} onChange={(event) => setAnnouncement(event.target.value)} /></label>
+            <div className="character-count">{announcement.length}/500</div>
+            <button className="primary-action form-submit" type="submit" disabled={!announcement.trim()}><Send size={16} /> BROADCAST NOW</button>
+          </form>
+        </Modal>
+      )}
+      {modal === "restart" && (
+        <Modal title="MANAGED SERVER RESTART" onClose={() => setModal(null)}>
+          <form className="resource-form" onSubmit={submitRestart}>
+            <div className="control-notice danger"><RotateCcw size={17} /><span>Players will receive a warning, then FXServer will exit and txAdmin will start it again.</span></div>
+            <div className="form-row">
+              <label>Countdown<select value={restartDraft.delay} onChange={(event) => setRestartDraft({ ...restartDraft, delay: Number(event.target.value) })}>
+                <option value={10}>10 seconds</option>
+                <option value={15}>15 seconds</option>
+                <option value={30}>30 seconds</option>
+                <option value={60}>1 minute</option>
+                <option value={300}>5 minutes</option>
+              </select></label>
+              <label>Reason<input value={restartDraft.reason} onChange={(event) => setRestartDraft({ ...restartDraft, reason: event.target.value })} /></label>
+            </div>
+            <div className="restart-confirm"><Clock size={15} /> Restart scheduled after confirmation. This cannot be canceled from WOLFHQ.</div>
+            <button className="primary-action form-submit danger-submit" type="submit"><RotateCcw size={16} /> CONFIRM SERVER RESTART</button>
+          </form>
+        </Modal>
+      )}
+      {toast && <div className="toast"><Check size={15} /> {toast}</div>}
+    </div>
+  );
+}

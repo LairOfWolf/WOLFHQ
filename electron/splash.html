@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WOLFHQ Boot</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Rajdhani:wght@600;700&display=swap");
+    :root { --cyan: #50dff9; --violet: #9d73ff; --green: #58ffd1; --pink: #ff4fb8; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050711; color: #e8f8ff; font-family: Rajdhani, sans-serif; }
+    body::before {
+      content: ""; position: fixed; inset: 0;
+      background:
+        radial-gradient(circle at 80% 12%, rgba(157, 115, 255, .35), transparent 26%),
+        radial-gradient(circle at 18% 80%, rgba(80, 223, 249, .18), transparent 34%),
+        linear-gradient(135deg, rgba(9, 16, 38, .98), rgba(4, 7, 17, 1));
+    }
+    body::after {
+      content: ""; position: fixed; inset: 0; opacity: .23; pointer-events: none;
+      background-image: linear-gradient(rgba(80, 223, 249, .13) 1px, transparent 1px), linear-gradient(90deg, rgba(80, 223, 249, .13) 1px, transparent 1px);
+      background-size: 36px 36px;
+      mask-image: radial-gradient(circle at 50% 45%, #000, transparent 78%);
+      animation: gridDrift 7s linear infinite;
+    }
+    .shell {
+      position: relative; width: 100%; height: 100%; padding: 28px;
+      display: grid; place-items: center;
+    }
+    .panel {
+      position: relative; width: 640px; height: 370px; overflow: hidden;
+      border: 1px solid rgba(80, 223, 249, .34);
+      background: linear-gradient(140deg, rgba(9, 15, 35, .86), rgba(6, 9, 22, .96));
+      box-shadow: 0 0 80px rgba(42, 119, 255, .18), inset 0 0 42px rgba(80, 223, 249, .04);
+      clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+    }
+    .panel::before {
+      content: ""; position: absolute; inset: -60% -20%;
+      background: conic-gradient(from 90deg, transparent, rgba(80, 223, 249, .28), transparent, rgba(157, 115, 255, .26), transparent);
+      animation: rotateAura 5s linear infinite;
+    }
+    .panel::after {
+      content: ""; position: absolute; inset: 1px;
+      background: radial-gradient(circle at 72% 20%, rgba(80, 223, 249, .1), transparent 30%), #060a17;
+      clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+    }
+    .content { position: relative; z-index: 1; height: 100%; padding: 32px; display: grid; grid-template-columns: 190px 1fr; gap: 30px; align-items: center; }
+    .core { position: relative; width: 174px; height: 174px; display: grid; place-items: center; }
+    .ring, .ring::before, .ring::after { position: absolute; inset: 0; border: 1px solid rgba(80, 223, 249, .32); border-radius: 50%; }
+    .ring { animation: pulseRing 1.9s ease-in-out infinite; }
+    .ring::before { content: ""; inset: 17px; border-color: rgba(157, 115, 255, .42); animation: reverseSpin 4s linear infinite; }
+    .ring::after { content: ""; inset: 36px; border-color: rgba(88, 255, 209, .38); animation: spin 3s linear infinite; }
+    .core img {
+      width: 112px; height: 112px; object-fit: cover; border: 1px solid rgba(80, 223, 249, .65);
+      clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+      box-shadow: 0 0 42px rgba(80, 223, 249, .25);
+      animation: logoFloat 2.6s ease-in-out infinite;
+    }
+    .copy h1 { margin: 0; color: white; font-size: 46px; letter-spacing: 6px; line-height: .9; text-shadow: 0 0 24px rgba(80, 223, 249, .38); }
+    .copy h1 span { color: var(--cyan); }
+    .copy p { margin: 12px 0 22px; color: #7895ad; font: 11px/1.7 "JetBrains Mono"; letter-spacing: .8px; }
+    .boot-lines { display: grid; gap: 8px; font: 10px "JetBrains Mono"; color: #7ca2b8; }
+    .boot-lines span { position: relative; padding-left: 18px; opacity: 0; transform: translateY(8px); animation: lineIn .45s ease forwards; }
+    .boot-lines span:nth-child(2) { animation-delay: .35s; }
+    .boot-lines span:nth-child(3) { animation-delay: .7s; }
+    .boot-lines span:nth-child(4) { animation-delay: 1.05s; color: var(--green); }
+    .boot-lines span::before { content: ""; position: absolute; left: 0; top: 4px; width: 7px; height: 7px; background: currentColor; box-shadow: 0 0 12px currentColor; }
+    .progress { position: absolute; left: 32px; right: 32px; bottom: 31px; height: 3px; background: rgba(80, 223, 249, .12); overflow: hidden; }
+    .progress i { display: block; height: 100%; width: 45%; background: linear-gradient(90deg, var(--violet), var(--cyan), var(--green)); box-shadow: 0 0 18px rgba(80, 223, 249, .7); animation: progressSweep 1.4s ease-in-out infinite; }
+    .status { position: absolute; right: 32px; bottom: 44px; color: #8db1c7; font: 9px "JetBrains Mono"; letter-spacing: 1.5px; }
+    .scanline { position: absolute; z-index: 2; left: 0; right: 0; height: 90px; background: linear-gradient(transparent, rgba(80, 223, 249, .08), transparent); animation: scan 2.1s ease-in-out infinite; pointer-events: none; }
+    @keyframes gridDrift { to { background-position: 36px 36px; } }
+    @keyframes rotateAura { to { transform: rotate(360deg); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes reverseSpin { to { transform: rotate(-360deg); } }
+    @keyframes pulseRing { 50% { transform: scale(1.04); opacity: .7; } }
+    @keyframes logoFloat { 50% { transform: translateY(-5px); } }
+    @keyframes lineIn { to { opacity: 1; transform: translateY(0); } }
+    @keyframes progressSweep { 0% { transform: translateX(-110%); } 100% { transform: translateX(240%); } }
+    @keyframes scan { 0% { top: -95px; } 100% { top: 100%; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel">
+      <div class="scanline"></div>
+      <div class="content">
+        <div class="core">
+          <div class="ring"></div>
+          <img src="../public/assets/wolfhq-icon.png" alt="WOLFHQ" />
+        </div>
+        <div class="copy">
+          <h1>WOLF<span>HQ</span></h1>
+          <p>SECURE COMMAND CENTER // INITIALIZING FILE BRIDGE, TELEMETRY, AI MATRIX, AND UPDATE CHANNEL</p>
+          <div class="boot-lines">
+            <span>VERIFYING LOCAL RUNTIME</span>
+            <span>LINKING GITHUB RELEASE CHANNEL</span>
+            <span>ARMING COMMAND INTERFACE</span>
+            <span>BOOT SEQUENCE READY</span>
+          </div>
+        </div>
+      </div>
+      <div class="status">STARTING WOLFHQ_</div>
+      <div class="progress"><i></i></div>
+    </section>
+  </main>
+</body>
+</html>
