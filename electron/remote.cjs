@@ -955,6 +955,9 @@ class RemoteServer {
     await this.writeFile(path.join(paths.resourceRoot, "server.lua"), serverScript);
     const serverCfg = (await this.readFileRaw(paths.configPath)).toString("utf8");
     const ensureLines = [];
+    if (!/^\s*add_ace\s+resource\.wolfhq-control\s+command(?:\s|\.|\*)/im.test(serverCfg)) {
+      ensureLines.push("add_ace resource.wolfhq-control command allow");
+    }
     if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
     if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
     if (ensureLines.length) {

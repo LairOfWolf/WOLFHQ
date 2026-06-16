@@ -687,7 +687,7 @@ function controlBridgeFiles() {
     "",
     "author 'WOLFHQ'",
     "description 'Local authenticated bridge for the WOLFHQ desktop command center'",
-    "version '2.1.1'",
+    "version '2.1.2'",
     "",
     "server_script 'server.lua'",
     ""
@@ -709,11 +709,6 @@ end
 
 local function announce(message)
     TriggerClientEvent('txcl:showAnnouncement', -1, message, 'WOLFHQ')
-    TriggerClientEvent('chat:addMessage', -1, {
-        color = { 80, 223, 249 },
-        multiline = true,
-        args = { 'WOLFHQ', message }
-    })
     print(('[WOLFHQ] Announcement: %s'):format(message))
 end
 
@@ -759,7 +754,7 @@ SetHttpHandler(function(req, res)
     end
 
     if req.method == 'GET' and req.path:match('/health$') then
-        return sendJson(res, 200, { ok = true, version = 2, resource = RESOURCE, players = #GetPlayers() })
+        return sendJson(res, 200, { ok = true, version = 3, resource = RESOURCE, players = #GetPlayers() })
     end
     if req.method == 'GET' and req.path:match('/players$') then
         local result = {}
@@ -789,7 +784,8 @@ SetHttpHandler(function(req, res)
             sendJson(res, 200, { ok = true, delay = delay })
             CreateThread(function()
                 Wait(delay * 1000)
-                ExecuteCommand('quit ' .. reason:gsub('[\\r\\n"]', ' '))
+                local safeReason = reason:gsub('[\\r\\n"]', ' ')
+                ExecuteCommand(('quit "%s"'):format(safeReason))
             end)
             return
         end
@@ -858,7 +854,9 @@ async function installControlBridge() {
       const health = await remoteServer.callControl("health", null, "GET");
       if (health?.ok) {
         await remoteServer.callControl("command", { command: "restart wolfhq-control" }).catch(() => {});
-        return { ...result, requiresServerRestart: false, running: true, restarted: true };
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const updatedHealth = await remoteServer.callControl("health", null, "GET").catch(() => health);
+        return { ...result, requiresServerRestart: Number(updatedHealth?.version) < 3, running: true, restarted: Number(updatedHealth?.version) >= 3 };
       }
     } catch {}
     return result;
@@ -877,6 +875,9 @@ async function installControlBridge() {
 
   const serverCfg = await fs.readFile(paths.configPath, "utf8");
   const ensureLines = [];
+  if (!/^\s*add_ace\s+resource\.wolfhq-control\s+command(?:\s|\.|\*)/im.test(serverCfg)) {
+    ensureLines.push("add_ace resource.wolfhq-control command allow");
+  }
   if (!/^\s*(?:ensure|start)\s+\[wolfhq\]\s*$/im.test(serverCfg)) ensureLines.push("ensure [wolfhq]");
   if (!/^\s*(?:ensure|start)\s+wolfhq-control\s*$/im.test(serverCfg)) ensureLines.push("ensure wolfhq-control");
   if (ensureLines.length) {
@@ -893,7 +894,9 @@ async function installControlBridge() {
     const health = await callControl(endpointFromConfig(), "health", null, "GET");
     if (health?.ok) {
       await callControl(endpointFromConfig(), "command", { command: "restart wolfhq-control" }).catch(() => {});
-      return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: false, running: true, restarted: true };
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const updatedHealth = await callControl(endpointFromConfig(), "health", null, "GET").catch(() => health);
+      return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: Number(updatedHealth?.version) < 3, running: true, restarted: Number(updatedHealth?.version) >= 3 };
     }
   } catch {}
   return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
