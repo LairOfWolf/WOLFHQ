@@ -65,6 +65,8 @@ const api = window.neonCore || {
   getUpdaterSettings: async () => ({ repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false }),
   checkForUpdate: async () => ({ available: false, currentVersion: "2.1.0", latestVersion: "2.1.0", assets: [] }),
   downloadUpdate: async () => null,
+  getArtifactsStatus: async () => ({ platform: "windows", builds: [], latestBuild: null, currentBuild: null }),
+  installArtifact: async () => null,
   openExternal: async () => null,
   minimize: () => {},
   maximize: () => {},
@@ -327,6 +329,9 @@ export default function App() {
     downloading: false,
     status: "Linked to LairOfWolf/WOLFHQ."
   });
+  const [artifactStatus, setArtifactStatus] = useState(null);
+  const [artifactBuild, setArtifactBuild] = useState("");
+  const [artifactBusy, setArtifactBusy] = useState(false);
   const [resourceDraft, setResourceDraft] = useState({
     name: "wolfhq-custom", description: "Custom gameplay resource", author: "WOLFHQ",
     framework: "Standalone", includeClient: true, includeServer: true
@@ -451,6 +456,18 @@ export default function App() {
     if (!project || activeView !== "resourceHub") return;
     loadResourceCatalog();
   }, [project, activeView, loadResourceCatalog]);
+
+  const loadArtifactStatus = useCallback(async () => {
+    const result = await api.getArtifactsStatus();
+    setArtifactStatus(result);
+    setArtifactBuild((current) => result.builds?.some((build) => String(build.build) === String(current)) ? current : String(result.latestBuild || ""));
+    return result;
+  }, []);
+
+  useEffect(() => {
+    if (!project || (activeView !== "artifacts" && activeView !== "settings")) return;
+    loadArtifactStatus().catch((error) => notify(error.message));
+  }, [project, activeView, loadArtifactStatus, notify]);
 
   useEffect(() => {
     if (!project || activeView !== "players") return;
@@ -1056,6 +1073,26 @@ export default function App() {
     }
   }
 
+  async function installServerArtifact(build = artifactBuild || artifactStatus?.latestBuild) {
+    const targetBuild = Number(build);
+    if (!targetBuild) {
+      notify("Pick an artifact build first");
+      return;
+    }
+    if (!window.confirm(`Update FXServer artifacts to build ${targetBuild}?\n\nWOLFHQ will back up old runtime files first and preserve resources, txData, server.cfg, and databases.`)) return;
+    setArtifactBusy(true);
+    try {
+      const result = await api.installArtifact({ build: targetBuild });
+      if (result?.project) setProject(result.project);
+      await loadArtifactStatus();
+      notify(`Server artifacts updated to build ${targetBuild}`);
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setArtifactBusy(false);
+    }
+  }
+
   async function runTitlebarUpdate() {
     if (updater.checking || updater.downloading) return;
     const latest = updater.latest?.available ? updater.latest : await checkAppUpdate();
@@ -1294,6 +1331,7 @@ export default function App() {
           <button className={`rail-button resources-rail ${activeView === "resources" ? "active" : ""}`} title="Resources" onClick={() => setActiveView("resources")}><Box size={19} /><span>Resources</span></button>
           <button className={`rail-button folders-rail ${activeView === "folders" ? "active" : ""}`} title="Server Folders" onClick={() => setActiveView("folders")}><FolderOpen size={19} /><span>Folders</span></button>
           <button className={`rail-button hub-rail ${activeView === "resourceHub" ? "active" : ""}`} title="Official Resource Hub" onClick={() => setActiveView("resourceHub")}><Download size={19} /><span>Hub</span></button>
+          <button className={`rail-button artifacts-rail ${activeView === "artifacts" ? "active" : ""}`} title="FXServer Artifacts" onClick={() => setActiveView("artifacts")}><PackageCheck size={19} /><span>Builds</span></button>
           <button className={`rail-button anticheat-rail ${activeView === "antiCheat" ? "active" : ""}`} title="Neko Anti-Cheat" onClick={() => setActiveView("antiCheat")}><ShieldAlert size={19} /><span>Neko AC</span></button>
           <button className={`rail-button players-rail ${activeView === "players" ? "active" : ""}`} title="Players" onClick={() => setActiveView("players")}><Users size={19} /><span>Players</span></button>
           <button className={`rail-button console-rail ${activeView === "console" ? "active" : ""}`} title="Console" onClick={() => setActiveView("console")}><Terminal size={19} /><span>Console</span></button>
@@ -1594,6 +1632,83 @@ export default function App() {
                       </article>
                     ))}
                     {!visibleCatalog.length && <div className="hub-empty"><Search size={34} /><strong>NO MATCHING OFFICIAL RESOURCES</strong><p>Change the framework, category, or search filter.</p></div>}
+                  </div>
+                </section>
+              )}
+
+              {activeView === "artifacts" && (
+                <section className="artifact-page panel-corners">
+                  <div className="artifact-hero">
+                    <div className="artifact-core"><PackageCheck size={38} /><span /></div>
+                    <span>
+                      <strong>FXSERVER ARTIFACT CONTROL</strong>
+                      <small>Official Cfx.re runtime feed, current build tracking, guarded replacement, and automatic restore-point storage.</small>
+                    </span>
+                    <div className={`artifact-state ${artifactStatus?.updateAvailable ? "needs-update" : "ready"}`}>
+                      <Circle size={8} fill="currentColor" />
+                      {artifactStatus?.managed ? artifactStatus.updateAvailable ? "UPDATE AVAILABLE" : "TRACKED CURRENTLY" : "UNMANAGED INSTALL"}
+                    </div>
+                  </div>
+
+                  <div className="artifact-grid">
+                    <div className="artifact-card primary">
+                      <span>CURRENT SERVER ARTIFACT</span>
+                      <strong>{artifactStatus?.currentBuild || "UNKNOWN"}</strong>
+                      <small>{artifactStatus?.installedAt ? `Installed ${new Date(artifactStatus.installedAt).toLocaleString()}` : "WOLFHQ will know the exact build after the first managed artifact update."}</small>
+                    </div>
+                    <div className="artifact-card">
+                      <span>LATEST OFFICIAL BUILD</span>
+                      <strong>{artifactStatus?.latestBuild || "--"}</strong>
+                      <small>{artifactStatus?.latestDate || "Waiting for Cfx feed"}</small>
+                    </div>
+                    <div className="artifact-card">
+                      <span>RECOMMENDED BUILD</span>
+                      <strong>{artifactStatus?.recommendedBuild || "--"}</strong>
+                      <small>Official latest recommended label from the artifact feed.</small>
+                    </div>
+                    <div className="artifact-card">
+                      <span>TARGET PLATFORM</span>
+                      <strong>{artifactStatus?.platform === "linux" ? "LINUX VPS" : "WINDOWS SERVER"}</strong>
+                      <small>{artifactStatus?.mode === "remote" ? "Using SSH updater" : "Using local runtime updater"}</small>
+                    </div>
+                  </div>
+
+                  <div className="artifact-console">
+                    <div className="artifact-feed">
+                      <div className="artifact-section-title"><Download size={17} /><span><strong>OFFICIAL BUILDS</strong><small>{artifactStatus?.feedUrl || "https://runtime.fivem.net"}</small></span></div>
+                      <div className="artifact-build-picker">
+                        <label>Install target
+                          <select value={artifactBuild} onChange={(event) => setArtifactBuild(event.target.value)}>
+                            {(artifactStatus?.builds || []).slice(0, 30).map((build) => (
+                              <option key={build.build} value={build.build}>{build.build} // {build.date}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <button className={artifactBusy ? "spinning" : ""} onClick={() => loadArtifactStatus().catch((error) => notify(error.message))} disabled={artifactBusy}><RefreshCw size={14} /> REFRESH FEED</button>
+                        <button className="primary-action compact" onClick={() => installServerArtifact()} disabled={artifactBusy || !artifactStatus?.builds?.length}><Download size={14} /> {artifactBusy ? "UPDATING..." : "INSTALL SELECTED"}</button>
+                      </div>
+                      <div className="artifact-build-list">
+                        {(artifactStatus?.builds || []).slice(0, 12).map((build) => (
+                          <button key={build.build} className={Number(artifactBuild) === build.build ? "active" : ""} onClick={() => setArtifactBuild(String(build.build))}>
+                            <span>{build.build}</span><small>{build.date}</small>
+                            {build.build === artifactStatus?.latestBuild && <i>LATEST</i>}
+                            {build.build === artifactStatus?.recommendedBuild && <i>RECOMMENDED</i>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <aside className="artifact-safety">
+                      <div className="artifact-section-title"><ShieldCheck size={17} /><span><strong>UPDATE SAFETY</strong><small>What WOLFHQ protects during replacement</small></span></div>
+                      <ul>
+                        <li><Check size={13} /> Old FXServer runtime files move into `.wolfhq-artifacts/backups` first.</li>
+                        <li><Check size={13} /> `resources`, `txData`, `server.cfg`, SQL files, and databases are preserved.</li>
+                        <li><Check size={13} /> Remote VPS updates run inside your existing encrypted SSH session.</li>
+                        <li><AlertTriangle size={13} /> Stop your FiveM server before replacing artifacts for the cleanest update.</li>
+                      </ul>
+                      <button onClick={() => api.openExternal(artifactStatus?.feedUrl || "https://runtime.fivem.net/artifacts/fivem/")}><ExternalLink size={14} /> OPEN OFFICIAL FEED</button>
+                      <button onClick={() => setActiveView("backups")}><Archive size={14} /> VIEW RESTORE POINTS</button>
+                    </aside>
                   </div>
                 </section>
               )}
@@ -2047,6 +2162,35 @@ export default function App() {
                       <div><span>RAM</span><strong>{status.process ? formatBytes(status.process.memoryBytes) : "--"}</strong></div>
                       <div><span>STARTED</span><strong>{status.process?.started ? new Date(status.process.started).toLocaleTimeString() : "--"}</strong></div>
                     </div>
+                  </div>
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><PackageCheck size={18} /><span><strong>SERVER ARTIFACTS</strong><small>Track and update the official FXServer runtime without touching server data.</small></span></div>
+                    <div className="runtime-grid">
+                      <div><span>CURRENT</span><strong>{artifactStatus?.currentBuild || "UNKNOWN"}</strong></div>
+                      <div><span>LATEST</span><strong>{artifactStatus?.latestBuild || "--"}</strong></div>
+                      <div><span>PLATFORM</span><strong>{artifactStatus?.platform || (isRemote ? "REMOTE" : "LOCAL")}</strong></div>
+                      <div><span>MODE</span><strong>{artifactStatus?.managed ? "TRACKED" : "UNMANAGED"}</strong></div>
+                    </div>
+                    <button className="secondary-action" onClick={() => { setActiveView("artifacts"); loadArtifactStatus().catch((error) => notify(error.message)); }}><PackageCheck size={15} /> OPEN ARTIFACT CONTROL</button>
+                  </div>
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><Archive size={18} /><span><strong>MAINTENANCE SAFETY</strong><small>Fast restore points before risky edits, deployments, or artifact replacement.</small></span></div>
+                    <div className="runtime-grid">
+                      <div><span>BACKUPS</span><strong>{backups.length}</strong></div>
+                      <div><span>SCHEDULE</span><strong>{opsSettings.backupSchedule || "manual"}</strong></div>
+                      <div><span>ROOT</span><strong>{project.name}</strong></div>
+                      <div><span>FILES</span><strong>{project.stats.files}</strong></div>
+                    </div>
+                    <button className="secondary-action" onClick={createBackupNow}><Archive size={15} /> CREATE RESTORE POINT</button>
+                  </div>
+                  <div className="settings-card panel-corners">
+                    <div className="settings-title"><LockKeyhole size={18} /><span><strong>SECURITY POSTURE</strong><small>Useful reminders for remote control, bridge access, and public updater hygiene.</small></span></div>
+                    <div className="settings-notes">
+                      <span><ShieldCheck size={13} /> Remote files stay behind SSH/SFTP.</span>
+                      <span><ShieldCheck size={13} /> Control bridge uses a local token and does not need a public port.</span>
+                      <span><ShieldCheck size={13} /> GitHub updater uses public releases and no saved personal tokens.</span>
+                    </div>
+                    <button className="secondary-action" onClick={() => setActiveView("history")}><History size={15} /> OPEN AUDIT HISTORY</button>
                   </div>
                 </section>
               )}

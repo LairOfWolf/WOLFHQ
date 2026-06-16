@@ -21,6 +21,9 @@ const CONTROL_BRIDGE_ACES = [
   "add_ace resource.wolfhq-control command.stop allow",
   "add_ace resource.wolfhq-control command.ensure allow"
 ];
+const ARTIFACT_RUNTIME_ENTRIES = [
+  "FXServer.exe", "FXServer", "run.sh", "citizen", "alpine", "components.json", "server-monitor.json"
+];
 
 function patchControlBridgeConfig(serverCfg) {
   const missingAces = CONTROL_BRIDGE_ACES.filter((line) => {
@@ -656,6 +659,44 @@ class RemoteServer {
       const [name, filePath, size, seconds] = line.split("|");
       return { name, path: filePath, size: Number(size), createdAt: new Date(Number(seconds) * 1000).toISOString(), mode: "remote" };
     });
+  }
+
+  async readArtifactMetadata() {
+    const filePath = this.safePath(path.join(this.profile.rootPath, ".wolfhq-artifact.json"));
+    try {
+      return JSON.parse((await this.readFileRaw(filePath)).toString("utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  async installArtifact(artifact) {
+    this.requireConnected();
+    const root = this.safePath(this.profile.rootPath);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const metadata = {
+      platform: artifact.platform,
+      build: artifact.build,
+      installedAt: new Date().toISOString(),
+      sourceUrl: artifact.url,
+      installedBy: "WOLFHQ"
+    };
+    if (this.isWindowsServer()) {
+      const runtimeList = ARTIFACT_RUNTIME_ENTRIES.map((entry) => powershellQuote(entry)).join(",");
+      const command = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $root=${powershellQuote(this.windowsShellPath(root))}; $url=${powershellQuote(artifact.url)}; $stamp=${powershellQuote(stamp)}; $work=Join-Path $env:TEMP ('wolfhq-artifact-' + $stamp); $extract=Join-Path $work 'extract'; New-Item -ItemType Directory -Force -Path $extract | Out-Null; $archive=Join-Path $work 'server.7z'; Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive; & tar.exe -xf $archive -C $extract; if($LASTEXITCODE -ne 0){ throw 'Windows could not extract server.7z. Install 7-Zip or update Windows tar support on the VPS.' }; $backup=Join-Path (Join-Path $root '.wolfhq-artifacts\\backups') $stamp; New-Item -ItemType Directory -Force -Path $backup | Out-Null; $items=@(${runtimeList}); foreach($item in $items){ $source=Join-Path $root $item; if(Test-Path -LiteralPath $source){ Move-Item -LiteralPath $source -Destination (Join-Path $backup $item) -Force } }; Copy-Item -Path (Join-Path $extract '*') -Destination $root -Recurse -Force; ${powershellQuote(JSON.stringify(metadata))} | Set-Content -LiteralPath (Join-Path $root '.wolfhq-artifact.json') -Encoding UTF8; Remove-Item -LiteralPath $work -Recurse -Force; [pscustomobject]@{ok=$true;build=${Number(artifact.build)};backupPath=$backup;platform='windows'} | ConvertTo-Json -Compress"`;
+      const result = await this.exec(command, 20 * 60 * 1000);
+      if (result.code !== 0) throw new Error(result.stderr || result.stdout || "Remote artifact update failed.");
+      return JSON.parse(result.stdout.trim());
+    }
+
+    const backupRoot = path.join(root, ".wolfhq-artifacts", "backups", stamp);
+    const runtimeScript = ARTIFACT_RUNTIME_ENTRIES
+      .map((entry) => `if [ -e ${shellQuote(path.join(root, entry))} ]; then mv ${shellQuote(path.join(root, entry))} ${shellQuote(path.join(backupRoot, entry))}; fi`)
+      .join(" ");
+    const command = `set -e; root=${shellQuote(root)}; stamp=${shellQuote(stamp)}; work=$(mktemp -d); extract="$work/extract"; mkdir -p "$extract" ${shellQuote(backupRoot)}; archive="$work/fx.tar.xz"; if command -v curl >/dev/null 2>&1; then curl -fL ${shellQuote(artifact.url)} -o "$archive"; else wget -O "$archive" ${shellQuote(artifact.url)}; fi; tar -xJf "$archive" -C "$extract"; ${runtimeScript}; cp -a "$extract"/. "$root"/; cat > "$root/.wolfhq-artifact.json" <<'WOLFHQ_ARTIFACT_META'\n${JSON.stringify(metadata, null, 2)}\nWOLFHQ_ARTIFACT_META\nrm -rf "$work"; printf '{"ok":true,"build":%s,"backupPath":%s,"platform":"linux"}' ${shellQuote(String(artifact.build))} ${shellQuote(JSON.stringify(backupRoot))}`;
+    const result = await this.exec(command, 20 * 60 * 1000);
+    if (result.code !== 0) throw new Error(result.stderr || result.stdout || "Remote artifact update failed.");
+    return JSON.parse(result.stdout.trim());
   }
 
   async restoreBackup(backupPath) {

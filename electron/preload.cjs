@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld("neonCore", {
   saveUpdaterSettings: (input) => ipcRenderer.invoke("updater:save-settings", input),
   checkForUpdate: (input) => ipcRenderer.invoke("updater:check", input),
   downloadUpdate: (input) => ipcRenderer.invoke("updater:download", input),
+  getArtifactsStatus: () => ipcRenderer.invoke("artifacts:status"),
+  installArtifact: (input) => ipcRenderer.invoke("artifacts:install", input),
   openExternal: (url) => ipcRenderer.invoke("external:open", url),
   minimize: () => ipcRenderer.send("window:minimize"),
   maximize: () => ipcRenderer.send("window:maximize"),

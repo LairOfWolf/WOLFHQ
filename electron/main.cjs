@@ -26,6 +26,13 @@ const DEFAULT_UPDATER_SETTINGS = {
   includePrerelease: false,
   encryptedToken: ""
 };
+const ARTIFACT_FEEDS = {
+  windows: "https://runtime.fivem.net/artifacts/fivem/build_server_windows/master/",
+  linux: "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/"
+};
+const ARTIFACT_RUNTIME_ENTRIES = [
+  "FXServer.exe", "FXServer", "run.sh", "citizen", "alpine", "components.json", "server-monitor.json"
+];
 
 let mainWindow;
 let splashWindow;
@@ -291,6 +298,123 @@ async function downloadGithubUpdate(input = {}) {
       ? `Downloaded ${safeName}. The installer is launching and WOLFHQ will close so the update can finish.`
       : `Downloaded ${safeName} to your Downloads folder.`
   };
+}
+
+function artifactPlatformFromProject() {
+  if (activeMode === "remote" && remoteServer) return remoteServer.isWindowsServer() ? "windows" : "linux";
+  return process.platform === "win32" ? "windows" : "linux";
+}
+
+function parseArtifactFeed(html, platform) {
+  const feedUrl = ARTIFACT_FEEDS[platform];
+  const recommended = html.match(/LATEST RECOMMENDED \((\d+)\)/i)?.[1] || "";
+  const optional = html.match(/LATEST OPTIONAL \((\d+)\)/i)?.[1] || "";
+  const builds = [];
+  const seen = new Set();
+  const pattern = platform === "windows"
+    ? /href=["']?\.\/(\d+)-([^/"']+)\/server\.7z["']?[\s\S]*?<div class="level-item">\s*([^<]+?)\s*<\/div>/gi
+    : /href=["']?\.\/(\d+)-([^/"']+)\/fx\.tar\.xz["']?[\s\S]*?<div class="level-item">\s*([^<]+?)\s*<\/div>/gi;
+  let match;
+  while ((match = pattern.exec(html)) && builds.length < 80) {
+    if (seen.has(match[1])) continue;
+    seen.add(match[1]);
+    const fileName = platform === "windows" ? "server.7z" : "fx.tar.xz";
+    builds.push({
+      build: Number(match[1]),
+      hash: match[2],
+      date: match[3].trim(),
+      url: new URL(`./${match[1]}-${match[2]}/${fileName}`, feedUrl).toString()
+    });
+  }
+  return {
+    platform,
+    feedUrl,
+    recommendedBuild: recommended ? Number(recommended) : null,
+    optionalBuild: optional ? Number(optional) : null,
+    latestBuild: builds[0]?.build || null,
+    latestDate: builds[0]?.date || "",
+    builds
+  };
+}
+
+async function fetchArtifactFeed(platform) {
+  const response = await fetch(ARTIFACT_FEEDS[platform], { headers: { "User-Agent": `WOLFHQ/${app.getVersion()}` } });
+  if (!response.ok) throw new Error(`Cfx artifact feed returned HTTP ${response.status}.`);
+  return parseArtifactFeed(await response.text(), platform);
+}
+
+async function readLocalArtifactMetadata(rootPath) {
+  try {
+    return JSON.parse(await fs.readFile(path.join(rootPath, ".wolfhq-artifact.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function getArtifactStatus() {
+  if (!activeRoot) throw new Error("Select or connect a FiveM server first.");
+  const platform = artifactPlatformFromProject();
+  const [feed, metadata] = await Promise.all([
+    fetchArtifactFeed(platform),
+    activeMode === "remote" ? remoteServer.readArtifactMetadata() : readLocalArtifactMetadata(activeRoot)
+  ]);
+  const currentBuild = Number(metadata?.build) || null;
+  return {
+    ...feed,
+    currentBuild,
+    currentSource: metadata?.sourceUrl || "",
+    installedAt: metadata?.installedAt || "",
+    managed: Boolean(currentBuild),
+    updateAvailable: Boolean(currentBuild && feed.latestBuild && feed.latestBuild > currentBuild),
+    rootPath: activeRoot,
+    mode: activeMode
+  };
+}
+
+async function installLocalArtifact(artifact) {
+  const root = requireSafePath(activeRoot);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const work = path.join(app.getPath("temp"), `wolfhq-artifact-${stamp}`);
+  const extract = path.join(work, "extract");
+  const archive = path.join(work, artifact.platform === "windows" ? "server.7z" : "fx.tar.xz");
+  await fs.mkdir(extract, { recursive: true });
+  const response = await fetch(artifact.url, { headers: { "User-Agent": `WOLFHQ/${app.getVersion()}` } });
+  if (!response.ok) throw new Error(`Artifact download failed with HTTP ${response.status}.`);
+  await fs.writeFile(archive, Buffer.from(await response.arrayBuffer()));
+  const tarArgs = artifact.platform === "windows" ? ["-xf", archive, "-C", extract] : ["-xJf", archive, "-C", extract];
+  await execFileAsync("tar.exe", tarArgs, { windowsHide: true, timeout: 10 * 60 * 1000 });
+  const backupPath = path.join(root, ".wolfhq-artifacts", "backups", stamp);
+  await fs.mkdir(backupPath, { recursive: true });
+  for (const entry of ARTIFACT_RUNTIME_ENTRIES) {
+    const source = path.join(root, entry);
+    try {
+      await fs.rename(source, path.join(backupPath, entry));
+    } catch {}
+  }
+  await fs.cp(extract, root, { recursive: true, force: true });
+  const metadata = {
+    platform: artifact.platform,
+    build: artifact.build,
+    installedAt: new Date().toISOString(),
+    sourceUrl: artifact.url,
+    installedBy: "WOLFHQ"
+  };
+  await fs.writeFile(path.join(root, ".wolfhq-artifact.json"), JSON.stringify(metadata, null, 2), "utf8");
+  await fs.rm(work, { recursive: true, force: true });
+  return { ok: true, build: artifact.build, backupPath, platform: artifact.platform };
+}
+
+async function installArtifact(input = {}) {
+  if (!activeRoot) throw new Error("Select or connect a FiveM server first.");
+  const feed = await fetchArtifactFeed(artifactPlatformFromProject());
+  const targetBuild = Number(input.build) || feed.latestBuild;
+  const artifact = feed.builds.find((build) => build.build === targetBuild);
+  if (!artifact) throw new Error(`Artifact build ${targetBuild || ""} was not found in the official Cfx feed.`);
+  const result = activeMode === "remote"
+    ? await remoteServer.installArtifact({ ...artifact, platform: feed.platform })
+    : await installLocalArtifact({ ...artifact, platform: feed.platform });
+  activeProject = activeMode === "remote" ? await remoteServer.scan() : await scanDirectory(activeRoot);
+  return { ...result, project: activeProject };
 }
 
 async function readProfiles() {
@@ -1462,6 +1586,8 @@ ipcMain.handle("updater:settings", async () => publicUpdaterSettings(await readU
 ipcMain.handle("updater:save-settings", (_event, input) => saveUpdaterSettings(input || {}));
 ipcMain.handle("updater:check", (_event, input) => checkForGithubUpdate(input || {}));
 ipcMain.handle("updater:download", (_event, input) => downloadGithubUpdate(input || {}));
+ipcMain.handle("artifacts:status", () => getArtifactStatus());
+ipcMain.handle("artifacts:install", (_event, input) => installArtifact(input || {}));
 
 ipcMain.handle("external:open", async (_event, url) => {
   if (!/^https?:\/\//i.test(url)) throw new Error("Unsupported URL.");

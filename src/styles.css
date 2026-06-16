@@ -87,6 +87,8 @@ button { color: inherit; }
 .rail-button.ai-rail.active { color: #e4d9ff; border-color: rgba(157, 115, 255, .45); background: linear-gradient(90deg, rgba(157, 115, 255, .18), rgba(80, 223, 249, .04)); box-shadow: inset 2px 0 var(--violet), 0 0 15px rgba(157, 115, 255, .12); }
 .rail-button.hub-rail { --rail-color: #5ea8ff; --rail-active: #d6ebff; --rail-rgb: 61, 127, 255; color: #5ea8ff; }
 .rail-button.hub-rail.active { color: #d6ebff; border-color: rgba(68, 130, 255, .42); background: linear-gradient(90deg, rgba(46, 95, 255, .2), rgba(80, 223, 249, .05)); box-shadow: inset 2px 0 #3d7fff, 0 0 15px rgba(46, 95, 255, .14); }
+.rail-button.artifacts-rail { --rail-color: #35f0a4; --rail-active: #d8ffed; --rail-rgb: 53, 240, 164; color: #35f0a4; }
+.rail-button.artifacts-rail.active { color: #d8ffed; border-color: rgba(53, 240, 164, .42); background: linear-gradient(90deg, rgba(53, 240, 164, .18), rgba(80, 223, 249, .04)); box-shadow: inset 2px 0 #35f0a4, 0 0 15px rgba(53, 240, 164, .13); }
 .rail-button.anticheat-rail { --rail-color: #ff6d9e; --rail-active: #ffd4e3; --rail-rgb: 255, 71, 127; color: #ff6d9e; }
 .rail-button.anticheat-rail.active { color: #ffd4e3; border-color: rgba(255, 72, 139, .4); background: linear-gradient(90deg, rgba(255, 56, 125, .19), rgba(157, 115, 255, .04)); box-shadow: inset 2px 0 #ff477f, 0 0 15px rgba(255, 56, 125, .14); }
 .rail-spacer { flex: 1; }
@@ -691,6 +693,47 @@ button { color: inherit; }
 .focused-stage .bridge-state span { font-size: 11px; }
 .focused-stage .runtime-grid span { color: #7891a7; font-size: 10px; }
 .focused-stage .runtime-grid strong { font-size: 15px; }
+.settings-notes { display: grid; gap: 10px; padding: 12px; border: 1px solid rgba(91, 144, 184, .13); background: #070b16; }
+.settings-notes span { display: flex; align-items: center; gap: 8px; color: #9eb8c9; font: 10px/1.5 "JetBrains Mono"; }
+.settings-notes svg { color: var(--green); }
+
+.artifact-page { height: calc(100vh - 100px); min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(53, 240, 164, .22); background: radial-gradient(circle at 90% 8%, rgba(53, 240, 164, .12), transparent 28%), rgba(5, 9, 20, .96); }
+.artifact-hero { min-height: 86px; flex: none; display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(53, 240, 164, .18); background: linear-gradient(110deg, rgba(53, 240, 164, .12), rgba(80, 223, 249, .035)); }
+.artifact-core { position: relative; width: 58px; height: 58px; display: grid; place-items: center; border: 1px solid rgba(53, 240, 164, .35); background: rgba(53, 240, 164, .06); color: #86ffd2; clip-path: polygon(11px 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%, 0 11px); }
+.artifact-core span { position: absolute; inset: 8px; border: 1px solid rgba(80, 223, 249, .18); animation: spin 6s linear infinite; }
+.artifact-hero > span { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.artifact-hero strong { color: #effff8; font-size: 19px; letter-spacing: 1.7px; }
+.artifact-hero small { margin-top: 5px; color: #79a2a1; font: 10px/1.6 "JetBrains Mono"; }
+.artifact-state { min-height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(88, 255, 209, .25); color: var(--green); background: rgba(88, 255, 209, .06); font: 9px "JetBrains Mono"; letter-spacing: .8px; }
+.artifact-state.needs-update { color: var(--amber); border-color: rgba(255, 188, 102, .35); background: rgba(255, 188, 102, .06); }
+.artifact-grid { flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(80, 223, 249, .1); }
+.artifact-card { min-height: 118px; padding: 16px; border: 1px solid rgba(91, 144, 184, .18); background: rgba(7, 11, 23, .88); display: flex; flex-direction: column; justify-content: center; }
+.artifact-card.primary { border-color: rgba(53, 240, 164, .3); background: linear-gradient(140deg, rgba(53, 240, 164, .1), rgba(7, 11, 23, .88)); }
+.artifact-card span { color: #6d8ea2; font: 9px "JetBrains Mono"; letter-spacing: .9px; }
+.artifact-card strong { margin-top: 8px; color: #f3fff9; font: 28px "Rajdhani"; letter-spacing: 1px; }
+.artifact-card small { margin-top: 7px; color: #7892a5; font: 10px/1.5 "JetBrains Mono"; }
+.artifact-console { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; padding: 0 16px 16px; overflow: hidden; }
+.artifact-feed, .artifact-safety { min-height: 0; border: 1px solid rgba(91, 144, 184, .16); background: rgba(5, 8, 18, .82); padding: 14px; overflow: auto; scrollbar-color: #1f4b65 transparent; scrollbar-width: thin; }
+.artifact-section-title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; color: var(--cyan); }
+.artifact-section-title span { display: flex; flex-direction: column; }
+.artifact-section-title strong { color: #d9fbff; font-size: 13px; letter-spacing: 1px; }
+.artifact-section-title small { margin-top: 3px; color: #648198; font: 9px "JetBrains Mono"; word-break: break-all; }
+.artifact-build-picker { display: grid; grid-template-columns: minmax(0, 1fr) 145px 180px; gap: 9px; align-items: end; margin-bottom: 12px; }
+.artifact-build-picker label { min-width: 0; display: flex; flex-direction: column; gap: 6px; color: #7e98aa; font: 9px "JetBrains Mono"; text-transform: uppercase; }
+.artifact-build-picker select { height: 38px; border: 1px solid rgba(92, 143, 190, .2); outline: 0; background: #070b16; color: #d2e6ee; padding: 0 10px; font: 11px "JetBrains Mono"; }
+.artifact-build-picker button, .artifact-safety button { min-height: 38px; border: 1px solid rgba(80, 223, 249, .22); background: rgba(80, 223, 249, .05); color: var(--cyan); display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; font: 9px "JetBrains Mono"; letter-spacing: .6px; }
+.artifact-build-picker button:disabled { opacity: .45; cursor: default; }
+.artifact-build-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.artifact-build-list button { min-height: 52px; padding: 9px 10px; border: 1px solid rgba(91, 144, 184, .13); background: rgba(8, 13, 27, .82); color: #adc7d4; text-align: left; cursor: pointer; display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.artifact-build-list button:hover, .artifact-build-list button.active { border-color: rgba(53, 240, 164, .35); background: rgba(53, 240, 164, .06); color: #e8fff7; }
+.artifact-build-list span { font: 18px "Rajdhani"; color: #e5f7ff; }
+.artifact-build-list small { color: #66859b; font: 9px "JetBrains Mono"; }
+.artifact-build-list i { padding: 3px 6px; border: 1px solid rgba(88, 255, 209, .24); color: var(--green); font: 7px "JetBrains Mono"; font-style: normal; }
+.artifact-safety ul { margin: 0 0 14px; padding: 0; list-style: none; display: grid; gap: 10px; }
+.artifact-safety li { display: flex; align-items: flex-start; gap: 8px; color: #a4bdca; font: 11px/1.55 "JetBrains Mono"; }
+.artifact-safety li svg { flex: 0 0 auto; margin-top: 2px; color: var(--green); }
+.artifact-safety li:last-child svg { color: var(--amber); }
+.artifact-safety button { width: 100%; margin-top: 8px; }
 
 .resource-hub { height: calc(100vh - 100px); min-height: 0; border: 1px solid rgba(62, 126, 255, .25); background: radial-gradient(circle at 90% 0, rgba(42, 82, 214, .16), transparent 30%), rgba(6, 10, 22, .96); overflow: hidden; display: flex; flex-direction: column; }
 .hub-header { min-height: 74px; flex: none; padding: 12px 18px; border-bottom: 1px solid rgba(76, 139, 255, .2); display: flex; align-items: center; gap: 13px; background: linear-gradient(100deg, rgba(38, 85, 224, .14), rgba(80, 223, 249, .03)); }
