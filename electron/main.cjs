@@ -203,10 +203,11 @@ async function fetchJson(url, settings) {
     headers: updaterAuthHeaders(settings)
   });
   const data = await response.json().catch(() => ({}));
-  if (response.status === 404 && !settings.encryptedToken) {
-    throw new Error("GitHub could not see LairOfWolf/WOLFHQ. Make the repo public so WOLFHQ can check releases without a token.");
+  if (!response.ok) {
+    const error = new Error(data.message || `GitHub returned HTTP ${response.status}.`);
+    error.status = response.status;
+    throw error;
   }
-  if (!response.ok) throw new Error(data.message || `GitHub returned HTTP ${response.status}.`);
   return data;
 }
 
@@ -221,8 +222,13 @@ async function checkForGithubUpdate(input = {}) {
   try {
     data = await fetchJson(apiUrl, settings);
   } catch (error) {
-    if (!settings.encryptedToken && /404|not found/i.test(error.message)) {
-      throw new Error("GitHub could not see LairOfWolf/WOLFHQ. Make the repo public so WOLFHQ can check releases without a token.");
+    if (error.status === 404 || /404|not found/i.test(error.message)) {
+      try {
+        await fetchJson(`https://api.github.com/repos/${settings.repo}`, settings);
+      } catch {
+        throw new Error(`GitHub could not see ${settings.repo}. Make sure the repo is public and the name is correct.`);
+      }
+      throw new Error(`No GitHub Release exists for ${settings.repo} yet. Create a release from the latest tag or wait for GitHub Actions to finish building it.`);
     }
     throw error;
   }

@@ -60,7 +60,10 @@ To publish an update, bump `package.json` version, commit, then push a matching
 tag:
 
 ```powershell
-git tag v2.1.1
+npm version 2.1.2 --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "Release v2.1.2"
+git tag v2.1.2
 git push origin main --tags
 ```
 

@@ -1,6 +1,6 @@
 {
   "name": "wolfhq-fivem-command-center",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "WOLFHQ local-first command center for FiveM server projects.",
   "productName": "WOLFHQ",
   "author": "Wolf Studios Inc.",
@@ -67,7 +67,7 @@
       "provider": "github",
       "owner": "LairOfWolf",
       "repo": "WOLFHQ",
-      "private": true
+      "private": false
     }
   }
 }
