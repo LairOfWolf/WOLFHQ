@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("neonCore", {
   getNekoAntiCheatStatus: (endpoint) => ipcRenderer.invoke("neko:status", endpoint),
   setNekoAntiCheatProfile: (endpoint, profile) => ipcRenderer.invoke("neko:profile", endpoint, profile),
   spectateNekoPlayer: (endpoint, options) => ipcRenderer.invoke("neko:spectate", endpoint, options),
+  updateNekoResourceGuards: (action) => ipcRenderer.invoke("neko:guards", action),
   sendAnnouncement: (endpoint, message) => ipcRenderer.invoke("control:announce", endpoint, message),
   restartServer: (endpoint, options) => ipcRenderer.invoke("control:restart", endpoint, options),
   getOpsDashboard: () => ipcRenderer.invoke("ops:dashboard"),

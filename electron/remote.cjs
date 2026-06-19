@@ -5,7 +5,7 @@ const http = require("node:http");
 const localPath = require("node:path");
 const path = require("node:path").posix;
 const { detectAntiCheats } = require("./anticheat.cjs");
-const { patchNekoAntiCheatConfig } = require("./neko-ac.cjs");
+const { patchNekoAntiCheatConfig, patchNekoResourceGuard, removeNekoResourceGuard } = require("./neko-ac.cjs");
 
 const TEXT_EXTENSIONS = new Set([
   ".lua", ".cfg", ".json", ".js", ".jsx", ".ts", ".tsx", ".html", ".css",
@@ -1055,6 +1055,7 @@ class RemoteServer {
     await this.writeFile(path.join(paths.resourceRoot, "config.lua"), files.config);
     await this.writeFile(path.join(paths.resourceRoot, "client.lua"), files.client);
     await this.writeFile(path.join(paths.resourceRoot, "server.lua"), files.server);
+    await this.writeFile(path.join(paths.resourceRoot, "resource_guard.lua"), files.guard);
     await this.writeFile(path.join(paths.resourceRoot, "README.md"), files.readme);
     await this.writeFile(path.join(paths.resourceRoot, "incidents.json"), "[]\n", { exclusive: true }).catch(() => {});
     await this.writeFile(path.join(paths.resourceRoot, "bans.json"), "[]\n", { exclusive: true }).catch(() => {});
@@ -1062,6 +1063,26 @@ class RemoteServer {
     const patchedConfig = patchNekoAntiCheatConfig(serverCfg);
     if (patchedConfig.changed) await this.writeFile(paths.configPath, patchedConfig.content);
     return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
+  }
+
+  async updateNekoResourceGuards(action = "install") {
+    const resources = Array.isArray(this.project?.resources) ? this.project.resources : [];
+    let changed = 0;
+    let scanned = 0;
+    const changedResources = [];
+    for (const resource of resources) {
+      if (!resource?.manifest || resource.name === "neko-anticheat") continue;
+      scanned += 1;
+      const text = (await this.readFileRaw(resource.manifest)).toString("utf8");
+      const result = action === "remove" ? removeNekoResourceGuard(text) : patchNekoResourceGuard(text);
+      if (result.changed) {
+        await this.writeFile(resource.manifest, result.content);
+        changed += 1;
+        changedResources.push(resource.name);
+      }
+    }
+    this.project = await this.scan();
+    return { ok: true, action, scanned, changed, resources: changedResources, project: this.project };
   }
 
   async callControl(route, payload, method = "POST") {

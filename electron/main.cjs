@@ -9,7 +9,13 @@ const { OpsManager } = require("./ops.cjs");
 const { AiManager } = require("./ai.cjs");
 const { ResourceCatalogManager } = require("./catalog.cjs");
 const { detectAntiCheats } = require("./anticheat.cjs");
-const { nekoAntiCheatFiles, patchNekoAntiCheatConfig } = require("./neko-ac.cjs");
+const {
+  NEKO_ANTI_CHEAT_VERSION,
+  nekoAntiCheatFiles,
+  patchNekoAntiCheatConfig,
+  patchNekoResourceGuard,
+  removeNekoResourceGuard
+} = require("./neko-ac.cjs");
 
 const execFileAsync = promisify(execFile);
 
@@ -1067,6 +1073,7 @@ async function installNekoAntiCheat(options = {}) {
   const files = nekoAntiCheatFiles(profile);
   if (activeMode === "remote") {
     const result = await remoteServer.installNekoAntiCheat(files, profile);
+    const guardResult = await remoteServer.updateNekoResourceGuards("install").catch((error) => ({ ok: false, error: error.message }));
     activeProject = await remoteServer.scan();
     let status = null;
     try {
@@ -1074,7 +1081,7 @@ async function installNekoAntiCheat(options = {}) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       status = await remoteServer.callNekoAntiCheat("status", null, "GET");
     } catch {}
-    return { ...result, project: activeProject, status, running: Boolean(status?.ok) };
+    return { ...result, guardResult, project: activeProject, status, running: Boolean(status?.ok) };
   }
 
   const paths = getNekoAntiCheatPaths();
@@ -1089,6 +1096,7 @@ async function installNekoAntiCheat(options = {}) {
   await fs.writeFile(path.join(paths.resourceRoot, "config.lua"), files.config, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "client.lua"), files.client, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "server.lua"), files.server, "utf8");
+  await fs.writeFile(path.join(paths.resourceRoot, "resource_guard.lua"), files.guard, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "README.md"), files.readme, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "incidents.json"), "[]\n", { flag: "wx" }).catch(() => {});
   await fs.writeFile(path.join(paths.resourceRoot, "bans.json"), "[]\n", { flag: "wx" }).catch(() => {});
@@ -1096,6 +1104,7 @@ async function installNekoAntiCheat(options = {}) {
   const serverCfg = await fs.readFile(paths.configPath, "utf8");
   const patchedConfig = patchNekoAntiCheatConfig(serverCfg);
   if (patchedConfig.changed) await fs.writeFile(paths.configPath, patchedConfig.content, "utf8");
+  const guardResult = await updateNekoResourceGuards("install").catch((error) => ({ ok: false, error: error.message }));
   activeProject = await scanDirectory(activeRoot);
   activeProject.mode = "local";
   let status = null;
@@ -1104,7 +1113,49 @@ async function installNekoAntiCheat(options = {}) {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     status = await callNekoAntiCheat(endpointFromConfig(), "status", null, "GET");
   } catch {}
-  return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: !status?.ok, running: Boolean(status?.ok), project: activeProject, status };
+  return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: !status?.ok, running: Boolean(status?.ok), guardResult, project: activeProject, status };
+}
+
+function compareVersions(left, right) {
+  const a = String(left || "0.0.0").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const b = String(right || "0.0.0").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const diff = (a[index] || 0) - (b[index] || 0);
+    if (diff) return diff;
+  }
+  return 0;
+}
+
+function withNekoVersionState(status) {
+  const installedVersion = status?.version || null;
+  const updateAvailable = Boolean(installedVersion) && compareVersions(installedVersion, NEKO_ANTI_CHEAT_VERSION) < 0;
+  return { ...status, latestVersion: NEKO_ANTI_CHEAT_VERSION, updateAvailable };
+}
+
+async function updateNekoResourceGuards(action = "install") {
+  if (activeMode === "remote") {
+    const result = await remoteServer.updateNekoResourceGuards(action);
+    activeProject = result.project;
+    return result;
+  }
+  const resources = Array.isArray(activeProject?.resources) ? activeProject.resources : [];
+  let changed = 0;
+  let scanned = 0;
+  const changedResources = [];
+  for (const resource of resources) {
+    if (!resource?.manifest || resource.name === "neko-anticheat") continue;
+    scanned += 1;
+    const text = await fs.readFile(resource.manifest, "utf8");
+    const result = action === "remove" ? removeNekoResourceGuard(text) : patchNekoResourceGuard(text);
+    if (result.changed) {
+      await fs.writeFile(resource.manifest, result.content, "utf8");
+      changed += 1;
+      changedResources.push(resource.name);
+    }
+  }
+  activeProject = await scanDirectory(activeRoot);
+  activeProject.mode = "local";
+  return { ok: true, action, scanned, changed, resources: changedResources, project: activeProject };
 }
 
 async function callControl(endpoint, route, payload, method = "POST") {
@@ -1147,7 +1198,7 @@ async function getNekoAntiCheatStatus(endpoint) {
     const status = activeMode === "remote"
       ? await remoteServer.callNekoAntiCheat("status", null, "GET")
       : await callNekoAntiCheat(endpoint || endpointFromConfig(), "status", null, "GET");
-    return { installed: true, running: true, detected, ...status };
+    return withNekoVersionState({ installed: true, running: true, detected, ...status });
   } catch (error) {
     let installed = Boolean(detected);
     if (!installed) {
@@ -1161,7 +1212,7 @@ async function getNekoAntiCheatStatus(endpoint) {
         installed = true;
       } catch {}
     }
-    return { ok: false, installed, running: false, detected, error: error.message, incidents: [], players: [], incidentCount: 0, banCount: 0, profile: "Balanced", modules: {} };
+    return withNekoVersionState({ ok: false, installed, running: false, detected, error: error.message, incidents: [], players: [], incidentCount: 0, banCount: 0, profile: "Balanced", modules: {} });
   }
 }
 
@@ -1616,6 +1667,7 @@ ipcMain.handle("neko:spectate", (_event, endpoint, options) =>
     action: options?.action === "stop" ? "stop" : "start"
   })
 );
+ipcMain.handle("neko:guards", (_event, action) => updateNekoResourceGuards(action === "remove" ? "remove" : "install"));
 ipcMain.handle("control:announce", (_event, endpoint, message) =>
   callControl(endpoint, "announce", { message: String(message || "").trim() })
 );

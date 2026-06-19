@@ -813,6 +813,7 @@ button { color: inherit; }
 .anti-cheat-toolbar > button:hover { border-color: rgba(255, 77, 139, .58); color: #ffe2ec; }
 .anti-cheat-toolbar > button.installed { border-color: rgba(88, 255, 209, .38); background: linear-gradient(100deg, rgba(88, 255, 209, .12), rgba(34, 120, 99, .06)); color: var(--green); }
 .anti-cheat-toolbar > button.installed:hover { border-color: rgba(88, 255, 209, .68); color: #e2fff7; background: linear-gradient(100deg, rgba(88, 255, 209, .18), rgba(34, 120, 99, .1)); }
+.anti-cheat-toolbar > button.outdated { border-color: rgba(255, 193, 74, .45); background: rgba(255, 193, 74, .09); color: #ffd36e; }
 .anti-cheat-body { flex: 1; min-height: 0; padding: 12px 16px 16px; overflow: auto; scrollbar-color: #5d2945 transparent; }
 .anti-cheat-metrics { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 9px; }
 .anti-cheat-metrics > div { min-height: 62px; padding: 10px 12px; border: 1px solid rgba(255, 76, 139, .13); background: linear-gradient(125deg, rgba(255, 58, 124, .06), rgba(8, 12, 25, .9)); display: flex; align-items: center; gap: 10px; }
@@ -861,6 +862,7 @@ button { color: inherit; }
 .neko-deploy:hover { border-color: rgba(255, 94, 154, .58); color: #ffe3ed; background: rgba(255, 60, 126, .1); }
 .neko-deploy.installed { border-color: rgba(88, 255, 209, .35); background: linear-gradient(100deg, rgba(88, 255, 209, .1), rgba(10, 18, 28, .85)); color: var(--green); }
 .neko-deploy.installed:hover { border-color: rgba(88, 255, 209, .65); color: #e2fff7; background: linear-gradient(100deg, rgba(88, 255, 209, .16), rgba(10, 18, 28, .9)); }
+.neko-deploy.outdated { border-color: rgba(255, 193, 74, .45); background: linear-gradient(100deg, rgba(255, 193, 74, .12), rgba(10, 18, 28, .85)); color: #ffd36e; }
 .neko-deploy:disabled { opacity: .58; cursor: wait; }
 .neko-status-warning { width: 100%; max-width: 560px; margin: 8px 0 0; padding: 8px 10px; border: 1px solid rgba(255, 193, 74, .28); background: rgba(255, 193, 74, .06); color: #f1c072; font: 8px/1.5 "JetBrains Mono"; text-align: left; }
 .existing-provider { padding-top: 5px; }
@@ -895,6 +897,14 @@ button { color: inherit; }
 .neko-version-card strong { color: #e2fff7; font-size: 30px; letter-spacing: 1.4px; }
 .neko-version-card span { margin-top: 6px; color: #8bbab0; font: 9px/1.55 "JetBrains Mono"; }
 .neko-version-card i { margin-top: 12px; color: var(--green); font: 8px "JetBrains Mono"; font-style: normal; }
+.neko-version-card.outdated { border-color: rgba(255, 193, 74, .34); background: radial-gradient(circle at 100% 0, rgba(255, 193, 74, .13), transparent 35%), rgba(25, 17, 7, .78); }
+.neko-version-card.outdated strong, .neko-version-card.outdated i { color: #ffd36e; }
+.neko-version-card.outdated span { color: #e0ba70; }
+.neko-guard-actions { margin-top: 9px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.neko-guard-actions button { min-height: 34px; border: 1px solid rgba(88, 255, 209, .26); background: rgba(88, 255, 209, .06); color: var(--green); display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; font: 8px "JetBrains Mono"; }
+.neko-guard-actions button.remove { border-color: rgba(255, 113, 143, .26); background: rgba(255, 113, 143, .05); color: #ff8fac; }
+.neko-guard-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.neko-guard-actions span { grid-column: 1 / -1; color: #756b78; font: 8px/1.45 "JetBrains Mono"; }
 .anti-player-list { max-height: 190px; overflow: auto; }
 .anti-player-list > button { width: 100%; min-height: 38px; padding: 0 8px; border: 0; border-bottom: 1px solid rgba(105, 136, 168, .08); background: transparent; display: grid; grid-template-columns: 70px minmax(120px, 1fr) 70px 120px; align-items: center; color: #756878; font: 8px "JetBrains Mono"; text-align: left; cursor: pointer; }
 .anti-player-list > button:hover, .anti-player-list > button.active { background: rgba(255, 75, 136, .05); box-shadow: inset 2px 0 #ff5990; }
@@ -977,10 +987,25 @@ button { color: inherit; }
 .modal:has(.remote-form) { width: min(700px, 92vw); max-height: 90vh; overflow: auto; }
 .modal:has(.database-edit-form) { width: min(820px, 94vw); }
 .modal:has(.neko-player-modal) { width: min(1180px, 96vw); max-height: 92vh; overflow: auto; border-color: rgba(255, 76, 139, .42); background: #070c19; }
+.modal:has(.neko-install-confirm) { width: min(680px, 92vw); border-color: rgba(255, 76, 139, .42); background: #070c19; }
 .modal-head { height: 48px; padding: 0 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .modal-head > div { display: flex; gap: 8px; align-items: center; color: var(--cyan); letter-spacing: 1px; font-size: 12px; }
 .modal-head button { border: 0; background: none; color: #607990; cursor: pointer; }
 .resource-form { padding: 17px; }
+.neko-install-confirm { padding: 18px; }
+.neko-install-core { min-height: 86px; padding: 14px; border: 1px solid rgba(255, 76, 139, .22); background: radial-gradient(circle at 100% 0, rgba(255, 76, 139, .14), transparent 35%), rgba(8, 12, 25, .92); display: flex; align-items: center; gap: 13px; }
+.neko-install-core svg { color: #ff6fa1; filter: drop-shadow(0 0 10px rgba(255, 76, 139, .35)); }
+.neko-install-core span { display: flex; flex-direction: column; }
+.neko-install-core strong { color: #fff4f8; font-size: 18px; letter-spacing: 1px; }
+.neko-install-core small { margin-top: 5px; color: #d0a9bc; font: 10px "JetBrains Mono"; }
+.neko-install-confirm p { margin: 12px 0; color: #a5b6c5; font: 12px/1.6 "JetBrains Mono"; }
+.neko-install-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.neko-install-facts div { min-height: 48px; padding: 8px; border: 1px solid rgba(88, 255, 209, .12); background: rgba(88, 255, 209, .035); display: flex; flex-direction: column; }
+.neko-install-facts span { color: #72a69d; font: 8px "JetBrains Mono"; }
+.neko-install-facts strong { margin-top: 5px; color: #e2fff7; font-size: 12px; }
+.neko-install-actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 1.4fr; gap: 9px; }
+.neko-install-actions button { height: 40px; border: 1px solid rgba(157, 115, 255, .28); background: rgba(157, 115, 255, .06); color: #cdbdff; cursor: pointer; font: 9px "JetBrains Mono"; }
+.neko-install-actions button.primary { border-color: rgba(88, 255, 209, .38); background: rgba(88, 255, 209, .1); color: var(--green); display: flex; align-items: center; justify-content: center; gap: 8px; }
 .resource-form label { display: flex; flex-direction: column; gap: 5px; color: #637d94; font: 8px "JetBrains Mono"; letter-spacing: .8px; }
 .resource-form input, .resource-form select, .resource-form textarea { height: 36px; padding: 0 9px; border: 1px solid rgba(90, 148, 192, .16); outline: 0; background: #070b16; color: #bad2df; font: 10px "JetBrains Mono"; }
 .resource-form textarea { height: 150px; padding: 9px; resize: vertical; }

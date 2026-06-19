@@ -1,5 +1,7 @@
 const NEKO_ANTI_CHEAT_RESOURCE = "neko-anticheat";
-const NEKO_ANTI_CHEAT_VERSION = "1.0.2";
+const NEKO_ANTI_CHEAT_VERSION = "1.0.3";
+const NEKO_RESOURCE_GUARD_MARKER = "-- WOLFHQ Neko Anti-Cheat resource guard";
+const NEKO_RESOURCE_GUARD_LINE = "shared_script '@neko-anticheat/resource_guard.lua'";
 
 function nekoAntiCheatFiles(profile = "Balanced") {
   const safeProfile = ["Monitor", "Balanced", "Strict"].includes(profile) ? profile : "Balanced";
@@ -14,6 +16,7 @@ function nekoAntiCheatFiles(profile = "Balanced") {
     "shared_script 'config.lua'",
     "client_script 'client.lua'",
     "server_script 'server.lua'",
+    "files { 'resource_guard.lua' }",
     ""
   ].join("\n");
   const config = [
@@ -54,6 +57,7 @@ function nekoAntiCheatFiles(profile = "Balanced") {
   const client = `local lastPosition = nil
 local lastReport = {}
 local clientStartedAt = GetGameTimer()
+local currentSpectateTarget = nil
 
 local function now()
     return GetGameTimer()
@@ -158,6 +162,8 @@ CreateThread(function()
 end)
 
 RegisterNetEvent('nekoac:spectate', function(targetServerId)
+    targetServerId = tonumber(targetServerId) or -1
+    if currentSpectateTarget == targetServerId then return end
     local target = GetPlayerFromServerId(tonumber(targetServerId) or -1)
     if target == -1 or not NetworkIsPlayerActive(target) then
         TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectate target is not online.' } })
@@ -170,14 +176,25 @@ RegisterNetEvent('nekoac:spectate', function(targetServerId)
     end
     NetworkSetInSpectatorMode(true, targetPed)
     SetFocusEntity(targetPed)
+    currentSpectateTarget = targetServerId
     TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectating server ID ' .. tostring(targetServerId) .. '. Use WOLFHQ Stop Spectate to exit.' } })
 end)
 
 RegisterNetEvent('nekoac:stopSpectate', function()
     NetworkSetInSpectatorMode(false, PlayerPedId())
     ClearFocus()
+    currentSpectateTarget = nil
     TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectate stopped.' } })
 end)
+`;
+  const guard = `local guardedResource = GetCurrentResourceName()
+if guardedResource ~= 'neko-anticheat' then
+    if IsDuplicityVersion() then
+        TriggerEvent('nekoac:resourceGuard', guardedResource)
+    else
+        TriggerServerEvent('nekoac:resourceGuardClient', guardedResource)
+    end
+end
 `;
   const server = `local RESOURCE = GetCurrentResourceName()
 local TOKEN = (LoadResourceFile(RESOURCE, '.neko-token') or ''):gsub('%s+$', '')
@@ -190,6 +207,7 @@ local runtimeSettings = json.decode(LoadResourceFile(RESOURCE, SETTINGS_FILE) or
 local players = {}
 local entityWindows = {}
 local explosionWindows = {}
+local protectedResources = {}
 
 local moduleNames = {
     PLAYER_INTEGRITY = 'Player integrity',
@@ -340,6 +358,17 @@ local function playerOnline(source)
     return false
 end
 
+local function autoWatcher(target)
+    target = tonumber(target) or -1
+    local fallback = nil
+    for _, playerId in ipairs(GetPlayers()) do
+        local numeric = tonumber(playerId)
+        if numeric and numeric ~= target then return numeric end
+        fallback = fallback or numeric
+    end
+    return fallback
+end
+
 local function hasBan(source)
     local current = identifiers(source)
     for _, ban in ipairs(bans) do
@@ -417,6 +446,16 @@ end)
 
 RegisterNetEvent('nekoac:flag', function(module, severity, message, data)
     addIncident(source, module, severity, message, data)
+end)
+
+AddEventHandler('nekoac:resourceGuard', function(resourceName)
+    resourceName = tostring(resourceName or '')
+    if resourceName ~= '' then protectedResources[resourceName] = true end
+end)
+
+RegisterNetEvent('nekoac:resourceGuardClient', function(resourceName)
+    resourceName = tostring(resourceName or '')
+    if resourceName ~= '' then protectedResources[resourceName] = true end
 end)
 
 AddEventHandler('playerConnecting', function(_, setKickReason)
@@ -506,7 +545,8 @@ local function statusPayload()
         incidents = recent,
         incidentCount = #incidents,
         banCount = #bans,
-        modules = moduleNames
+        modules = moduleNames,
+        protectedResources = protectedResources
     }
 end
 
@@ -538,6 +578,7 @@ SetHttpHandler(function(req, res)
             local watcher = tonumber(payload.watcher)
             local target = tonumber(payload.target)
             local action = tostring(payload.action or 'start')
+            if not watcher then watcher = autoWatcher(target) end
             if not watcher or not playerOnline(watcher) then return sendJson(res, 400, { ok = false, error = 'Watcher server ID is not online.' }) end
             if action == 'stop' then
                 TriggerClientEvent('nekoac:stopSpectate', watcher)
@@ -573,7 +614,7 @@ cleanupEarlyFalsePositiveBans()
     "- Strict: faster enforcement for high-risk servers",
     ""
   ].join("\n");
-  return { manifest, config, client, server, readme };
+  return { manifest, config, client, server, guard, readme };
 }
 
 function patchNekoAntiCheatConfig(serverCfg) {
@@ -584,9 +625,27 @@ function patchNekoAntiCheatConfig(serverCfg) {
   return { content: `${serverCfg}${suffix}`, changed: true };
 }
 
+function patchNekoResourceGuard(manifestText) {
+  if (manifestText.includes(NEKO_RESOURCE_GUARD_LINE)) return { content: manifestText, changed: false };
+  const suffix = `${manifestText.endsWith("\n") ? "" : "\n"}${NEKO_RESOURCE_GUARD_MARKER}\n${NEKO_RESOURCE_GUARD_LINE}\n`;
+  return { content: `${manifestText}${suffix}`, changed: true };
+}
+
+function removeNekoResourceGuard(manifestText) {
+  const before = manifestText;
+  let content = manifestText
+    .replace(new RegExp(`^\\s*${NEKO_RESOURCE_GUARD_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\r?\\n`, "gim"), "")
+    .replace(new RegExp(`^\\s*shared_script\\s+['"]@neko-anticheat/resource_guard\\.lua['"]\\s*\\r?\\n`, "gim"), "");
+  content = content.replace(/\n{3,}/g, "\n\n");
+  return { content, changed: content !== before };
+}
+
 module.exports = {
   NEKO_ANTI_CHEAT_RESOURCE,
   NEKO_ANTI_CHEAT_VERSION,
+  NEKO_RESOURCE_GUARD_LINE,
   nekoAntiCheatFiles,
-  patchNekoAntiCheatConfig
+  patchNekoAntiCheatConfig,
+  patchNekoResourceGuard,
+  removeNekoResourceGuard
 };
