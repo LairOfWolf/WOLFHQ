@@ -322,7 +322,7 @@ class AiManager {
     if (!response.ok) {
       const providerMessage = String(data.error?.message || data.error || `AI provider returned HTTP ${response.status}.`);
       if (/credit|balance|billing|quota|insufficient/i.test(providerMessage)) {
-        throw new Error(`Your Limit tokens setting is active (${outputTokenLimit}), but the AI provider rejected the API key/account before WOLFHQ could run the request. Check provider API access or switch to another configured endpoint.`);
+        throw new Error(`WOLFHQ sent your output token limit (${outputTokenLimit}), but the AI provider rejected this API key/account before generation started. Claude Desktop/Pro limits are separate from Anthropic API billing, so check the API console key/billing or switch to another configured endpoint.`);
       }
       throw new Error(providerMessage);
     }

@@ -2206,7 +2206,7 @@ export default function App() {
                       <aside className="ai-config">
                         <div className="ai-section-title"><KeyRound size={14} /> PROVIDER VAULT</div>
                         <label>Provider<select value={aiSettings.provider} onChange={(event) => changeAiProvider(event.target.value)}>
-                          <option value="anthropic">Anthropic Claude</option>
+                          <option value="anthropic">Anthropic API (Claude models)</option>
                           <option value="openai-compatible">OpenAI-compatible</option>
                         </select></label>
                         <label>Model<select value={aiSettings.model} onChange={(event) => changeAiModel(event.target.value)}>
@@ -2217,7 +2217,7 @@ export default function App() {
                         <label>Limit tokens<input type="number" min="512" max="16000" step="256" value={aiSettings.maxOutputTokens || 4096} onChange={(event) => setAiSettings({ ...aiSettings, maxOutputTokens: Number(event.target.value) || 4096 })} /></label>
                         <label>API key<input type="password" placeholder={aiSettings.hasApiKey ? "Encrypted key saved - leave blank to keep it" : "Enter provider API key"} value={aiSettings.apiKey} onChange={(event) => setAiSettings({ ...aiSettings, apiKey: event.target.value })} /></label>
                         <button onClick={saveAiProvider}><ShieldCheck size={13} /> ENCRYPT AND SAVE</button>
-                        <div className="ai-security"><LockKeyhole size={14} /><span>Keys are encrypted by Windows. WOLFHQ uses your configured limit tokens for responses and redacts credentials before file context is sent.</span></div>
+                        <div className="ai-security"><LockKeyhole size={14} /><span>Keys are encrypted by Windows. WOLFHQ sends your configured output token limit, but Claude Desktop/Pro usage limits are separate from Anthropic API access.</span></div>
 
                         <div className="ai-section-title search-title"><Search size={14} /> FILE INTELLIGENCE</div>
                         <div className="ai-search">

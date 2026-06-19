@@ -47,7 +47,7 @@ test("reports provider account rejection while keeping the configured token limi
 
   await assert.rejects(
     () => manager.propose("Check this server."),
-    /Limit tokens setting is active \(1024\)/
+    /output token limit \(1024\).*Claude Desktop\/Pro limits are separate/
   );
 });
 

@@ -49,8 +49,10 @@ test("generates the installable Neko Anti-Cheat resource files", () => {
   assert.match(files.uiHtml, /CLEAR WARNINGS/);
   assert.doesNotMatch(files.uiHtml, /DEFENCE MODULES|WARNING STREAM/);
   assert.match(files.uiCss, /#app/);
+  assert.match(files.uiCss, /action-panel\{grid-column:1;grid-row:2\}/);
   assert.match(files.uiJs, /spectate/);
   assert.match(files.uiJs, /playerAction|renderActions|renderInspector/);
+  assert.doesNotMatch(files.uiJs, /PLAYER FLAGS/);
   assert.match(files.server, /SetHttpHandler/);
   assert.match(files.server, /req\.path:match\('\/status\$'\)/);
   assert.match(files.server, /req\.path:match\('\/spectate\$'\)/);
