@@ -64,6 +64,8 @@ const api = window.neonCore || {
   getAiSettings: async () => ({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", maxOutputTokens: 4096, hasApiKey: false }),
   saveAiSettings: async () => null,
   getAiModels: async () => ({ models: [], live: false }),
+  getClaudeCodeStatus: async () => ({ available: false, loggedIn: false, message: "Claude Code status is unavailable in preview mode." }),
+  loginClaudeCode: async () => ({ available: false, loggedIn: false, message: "Claude Code login is unavailable in preview mode." }),
   searchAiFiles: async () => ({ indexedFiles: 0, results: [] }),
   proposeAiChanges: async () => ({ summary: "", indexedFiles: 0, contextFiles: 0, files: [] }),
   applyAiChanges: async () => null,
@@ -339,6 +341,8 @@ export default function App() {
   const [aiModelsLive, setAiModelsLive] = useState(false);
   const [aiMessages, setAiMessages] = useState([]);
   const [aiBusy, setAiBusy] = useState(false);
+  const [claudeCodeStatus, setClaudeCodeStatus] = useState({ available: false, loggedIn: false, message: "Select Claude Code Login to check this PC." });
+  const [claudeCodeBusy, setClaudeCodeBusy] = useState(false);
   const [updater, setUpdater] = useState({
     settings: { repo: "LairOfWolf/WOLFHQ", checkOnStartup: true, includePrerelease: false },
     latest: null,
@@ -536,6 +540,7 @@ export default function App() {
       setAiModels(modelResult.models?.length ? modelResult.models : AI_MODEL_FALLBACKS[settings.provider]);
       setAiModelsLive(Boolean(modelResult.live));
       setAiSearch(search);
+      if (settings.provider === "claude-code") refreshClaudeCodeLogin(settings.endpoint, false);
     }).catch((error) => notify(error.message));
   }, [project, activeView, notify]);
 
@@ -1257,9 +1262,49 @@ export default function App() {
       setAiSettings((current) => ({ ...current, ...settings, apiKey: "" }));
       setAiModels(modelResult.models?.length ? modelResult.models : AI_MODEL_FALLBACKS[settings.provider]);
       setAiModelsLive(Boolean(modelResult.live));
+      if (settings.provider === "claude-code") refreshClaudeCodeLogin(settings.endpoint, false);
       notify("AI provider saved securely");
     } catch (error) {
       notify(error.message);
+    }
+  }
+
+  async function refreshClaudeCodeLogin(endpointValue = aiSettings.endpoint, shouldNotify = true) {
+    if (claudeCodeBusy) return;
+    setClaudeCodeBusy(true);
+    try {
+      const result = await api.getClaudeCodeStatus({ endpoint: endpointValue || "claude" });
+      setClaudeCodeStatus(result);
+      if (shouldNotify) notify(result.message || (result.loggedIn ? "Claude Code login is ready" : "Claude Code login still needs attention"));
+      return result;
+    } catch (error) {
+      const result = { available: false, loggedIn: false, message: cleanErrorMessage(error.message) };
+      setClaudeCodeStatus(result);
+      if (shouldNotify) notify(result.message);
+      return result;
+    } finally {
+      setClaudeCodeBusy(false);
+    }
+  }
+
+  async function startClaudeCodeLogin() {
+    if (claudeCodeBusy) return;
+    setClaudeCodeBusy(true);
+    try {
+      const settings = await api.saveAiSettings({ ...aiSettings, provider: "claude-code" });
+      setAiSettings((current) => ({ ...current, ...settings, apiKey: "" }));
+      setAiModels(AI_MODEL_FALLBACKS["claude-code"]);
+      setAiModelsLive(true);
+      const result = await api.loginClaudeCode({ endpoint: settings.endpoint || aiSettings.endpoint || "claude" });
+      setClaudeCodeStatus(result);
+      notify(result.message);
+      window.setTimeout(() => refreshClaudeCodeLogin(settings.endpoint || aiSettings.endpoint || "claude", false), 7000);
+    } catch (error) {
+      const result = { available: false, loggedIn: false, message: cleanErrorMessage(error.message) };
+      setClaudeCodeStatus(result);
+      notify(result.message);
+    } finally {
+      setClaudeCodeBusy(false);
     }
   }
 
@@ -1357,6 +1402,7 @@ export default function App() {
     }));
     setAiModels(models);
     setAiModelsLive(provider === "claude-code");
+    if (provider === "claude-code") window.setTimeout(() => refreshClaudeCodeLogin(next.endpoint, false), 0);
   }
 
   const resourceNames = useMemo(() => project?.resources?.slice(0, 8) || [], [project]);
@@ -2209,7 +2255,9 @@ export default function App() {
                       <span><strong>WOLFHQ AI CODE MATRIX</strong><small>Search the full indexed server, reason over relevant files, review complete edits, then apply with an automatic restore point.</small></span>
                       <div className="ai-header-actions">
                         <button type="button" onClick={startNewAiChat} disabled={aiBusy}><Plus size={13} /> NEW CHAT</button>
-                        <i>{aiSettings.hasApiKey ? "PROVIDER ARMED" : "SETUP REQUIRED"}</i>
+                        <i className={aiSettings.provider === "claude-code" ? claudeCodeStatus.loggedIn ? "ready" : claudeCodeStatus.available ? "warn" : "danger" : ""}>
+                          {aiSettings.provider === "claude-code" ? claudeCodeStatus.loggedIn ? "CLAUDE LOGIN READY" : claudeCodeStatus.available ? "LOGIN NEEDED" : "CLAUDE NOT FOUND" : aiSettings.hasApiKey ? "PROVIDER ARMED" : "SETUP REQUIRED"}
+                        </i>
                       </div>
                     </div>
 
@@ -2229,7 +2277,16 @@ export default function App() {
                         <label>Limit tokens<input type="number" min="512" max="16000" step="256" value={aiSettings.maxOutputTokens || 4096} onChange={(event) => setAiSettings({ ...aiSettings, maxOutputTokens: Number(event.target.value) || 4096 })} /></label>
                         {aiSettings.provider !== "claude-code" && <label>API key<input type="password" placeholder={aiSettings.hasApiKey ? "Encrypted key saved - leave blank to keep it" : "Enter provider API key"} value={aiSettings.apiKey} onChange={(event) => setAiSettings({ ...aiSettings, apiKey: event.target.value })} /></label>}
                         <button onClick={saveAiProvider}><ShieldCheck size={13} /> {aiSettings.provider === "claude-code" ? "SAVE CLAUDE CODE LOGIN MODE" : "ENCRYPT AND SAVE"}</button>
-                        <div className="ai-security"><LockKeyhole size={14} /><span>{aiSettings.provider === "claude-code" ? "WOLFHQ calls your local Claude Code CLI in print mode. Run `claude login` first so it uses your plan limits." : "Keys are encrypted by Windows. WOLFHQ sends your configured output token limit for every API provider."}</span></div>
+                        {aiSettings.provider === "claude-code" && (
+                          <div className={`ai-login-panel ${claudeCodeStatus.loggedIn ? "ready" : claudeCodeStatus.available ? "warn" : "danger"}`}>
+                            <div><Terminal size={15} /><span><strong>{claudeCodeStatus.loggedIn ? "CLAUDE CODE CONNECTED" : claudeCodeStatus.available ? "CLAUDE CODE NEEDS LOGIN" : "CLAUDE CODE NOT FOUND"}</strong><small>{claudeCodeStatus.message}</small></span></div>
+                            <div className="ai-login-actions">
+                              <button type="button" onClick={() => refreshClaudeCodeLogin(aiSettings.endpoint)} disabled={claudeCodeBusy}><RefreshCw size={13} /> CHECK LOGIN</button>
+                              <button type="button" onClick={startClaudeCodeLogin} disabled={claudeCodeBusy}><ExternalLink size={13} /> LOGIN</button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="ai-security"><LockKeyhole size={14} /><span>{aiSettings.provider === "claude-code" ? "WOLFHQ launches Claude Code login for you, then calls the local Claude Code CLI in print mode so it uses your signed-in plan limits." : "Keys are encrypted by Windows. WOLFHQ sends your configured output token limit for every API provider."}</span></div>
 
                         <div className="ai-section-title search-title"><Search size={14} /> FILE INTELLIGENCE</div>
                         <div className="ai-search">

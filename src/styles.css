@@ -549,6 +549,8 @@ button { color: inherit; }
 .ai-header-actions button:hover { border-color: rgba(80, 223, 249, .55); color: #d8fbff; box-shadow: 0 0 18px rgba(80, 223, 249, .08); }
 .ai-header-actions button:disabled { opacity: .38; cursor: default; box-shadow: none; }
 .ai-header-actions i { padding: 7px 9px; border: 1px solid rgba(88, 255, 209, .23); color: var(--green); background: rgba(88, 255, 209, .05); font: 7px "JetBrains Mono"; font-style: normal; white-space: nowrap; }
+.ai-header-actions i.warn { border-color: rgba(255, 190, 76, .38); color: #ffd477; background: rgba(255, 190, 76, .07); }
+.ai-header-actions i.danger { border-color: rgba(255, 93, 145, .42); color: #ff9cbc; background: rgba(255, 76, 139, .08); }
 .ai-layout { height: calc(100vh - 333px); min-height: 430px; display: grid; grid-template-columns: 285px minmax(0, 1fr); }
 .ai-config { min-width: 0; padding: 13px; border-right: 1px solid rgba(157, 115, 255, .16); overflow: auto; background: rgba(5, 8, 18, .72); }
 .ai-section-title { min-height: 28px; display: flex; align-items: center; gap: 7px; color: var(--cyan); font: 8px "JetBrains Mono"; letter-spacing: 1px; }
@@ -557,6 +559,18 @@ button { color: inherit; }
 .ai-config input, .ai-config select, .ai-search input { height: 32px; min-width: 0; padding: 0 8px; border: 1px solid rgba(107, 150, 190, .15); outline: 0; background: #070b16; color: #b4ccd7; font: 8px "JetBrains Mono"; }
 .ai-model-source { margin-top: 7px; display: flex; align-items: center; gap: 6px; color: var(--green); font: 7px "JetBrains Mono"; }
 .ai-config > button { width: 100%; min-height: 32px; margin-top: 9px; border: 1px solid rgba(157, 115, 255, .35); background: linear-gradient(100deg, rgba(157, 115, 255, .14), rgba(80, 223, 249, .06)); color: #d1c2ff; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 8px; cursor: pointer; }
+.ai-login-panel { margin-top: 9px; padding: 9px; border: 1px solid rgba(255, 190, 76, .24); background: linear-gradient(135deg, rgba(255, 190, 76, .07), rgba(157, 115, 255, .04)); color: #ffd477; }
+.ai-login-panel.ready { border-color: rgba(88, 255, 209, .24); background: rgba(88, 255, 209, .035); color: var(--green); }
+.ai-login-panel.danger { border-color: rgba(255, 93, 145, .3); background: rgba(255, 76, 139, .045); color: #ff9cbc; }
+.ai-login-panel > div:first-child { display: flex; gap: 8px; align-items: flex-start; }
+.ai-login-panel svg { flex: none; margin-top: 1px; }
+.ai-login-panel span { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ai-login-panel strong { color: currentColor; font: 8px "JetBrains Mono"; letter-spacing: .8px; }
+.ai-login-panel small { color: #8ba1b5; font: 7px/1.45 "JetBrains Mono"; word-break: break-word; }
+.ai-login-actions { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ai-login-actions button { min-height: 30px; border: 1px solid rgba(80, 223, 249, .24); background: rgba(80, 223, 249, .055); color: var(--cyan); display: flex; align-items: center; justify-content: center; gap: 6px; font: 7px "JetBrains Mono"; cursor: pointer; }
+.ai-login-actions button:last-child { border-color: rgba(88, 255, 209, .28); color: var(--green); background: rgba(88, 255, 209, .055); }
+.ai-login-actions button:disabled { opacity: .42; cursor: default; }
 .ai-security { margin-top: 9px; padding: 8px; border: 1px solid rgba(88, 255, 209, .12); display: flex; gap: 7px; color: #557267; background: rgba(88, 255, 209, .025); font: 7px/1.5 "JetBrains Mono"; }
 .ai-security svg { flex: none; color: var(--green); }
 .search-title { margin-top: 13px; border-top: 1px solid rgba(98, 145, 184, .1); padding-top: 10px; }
@@ -619,6 +633,11 @@ button { color: inherit; }
 .focused-stage .ai-model-source,
 .focused-stage .ai-index-count { color: #7893a8; font-size: 9px; }
 .focused-stage .ai-config > button { min-height: 40px; font-size: 10px; }
+.focused-stage .ai-login-panel { padding: 12px; }
+.focused-stage .ai-login-panel strong { font-size: 10px; }
+.focused-stage .ai-login-panel small,
+.focused-stage .ai-login-actions button { font-size: 9px; }
+.focused-stage .ai-login-actions button { min-height: 36px; }
 .focused-stage .ai-security { padding: 11px; color: #83a89b; font-size: 9px; }
 .focused-stage .ai-search button { width: 42px; }
 .focused-stage .ai-search-results { gap: 6px; }

@@ -1741,6 +1741,14 @@ ipcMain.handle("ai:models", async () => {
   await getOpsManager().assertPermission("ai");
   return getAiManager().listModels();
 });
+ipcMain.handle("ai:claude-status", async (_event, input) => {
+  await getOpsManager().assertPermission("ai");
+  return getAiManager().claudeCodeStatus(input || {});
+});
+ipcMain.handle("ai:claude-login", async (_event, input) => {
+  await getOpsManager().assertPermission("ai");
+  return getAiManager().launchClaudeCodeLogin(input || {});
+});
 ipcMain.handle("ai:search", async (_event, query) => {
   await getOpsManager().assertPermission("ai");
   return getAiManager().search(query);

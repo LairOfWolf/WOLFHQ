@@ -114,9 +114,24 @@ function splitCommandLine(value) {
   return parts;
 }
 
+async function existingDirectory(pathValue, fallback) {
+  const candidate = String(pathValue || "");
+  if (!candidate) return fallback;
+  try {
+    const stat = await fs.stat(candidate);
+    return stat.isDirectory() ? candidate : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function quoteCmdArg(value) {
   const text = String(value);
   return `"${text.replace(/(["^&|<>%])/g, "^$1")}"`;
+}
+
+function windowsCmdPath() {
+  return process.env.ComSpec || path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
 }
 
 function runCommand(commandLine, args, options = {}) {
@@ -147,7 +162,7 @@ function runCommand(commandLine, args, options = {}) {
         if (process.platform === "win32" && error.code === "ENOENT" && processRef === child) {
           retryingThroughCmd = true;
           const shellLine = [quoteCmdArg(command), ...allArgs.map(quoteCmdArg)].join(" ");
-          const retry = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", shellLine], {
+          const retry = spawn(windowsCmdPath(), ["/d", "/s", "/c", shellLine], {
             cwd: options.cwd,
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"]
@@ -178,6 +193,29 @@ function runCommand(commandLine, args, options = {}) {
     }, options.timeout || 180000);
     attach(child);
   });
+}
+
+function launchInteractiveCommand(commandLine, args, options = {}) {
+  const commandParts = splitCommandLine(commandLine);
+  const command = commandParts.shift() || "claude";
+  const allArgs = [...commandParts, ...args];
+  if (process.platform === "win32") {
+    const shellLine = [quoteCmdArg(command), ...allArgs.map(quoteCmdArg)].join(" ");
+    const child = spawn(windowsCmdPath(), ["/d", "/s", "/c", `start "WOLFHQ Claude Login" ${windowsCmdPath()} /k ${shellLine}`], {
+      cwd: options.cwd,
+      detached: true,
+      windowsHide: false,
+      stdio: "ignore"
+    });
+    child.unref();
+    return;
+  }
+  const child = spawn(command, allArgs, {
+    cwd: options.cwd,
+    detached: true,
+    stdio: "ignore"
+  });
+  child.unref();
 }
 
 function unwrapClaudeCodeOutput(stdout) {
@@ -239,6 +277,12 @@ class AiManager {
       maxOutputTokens: Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000)),
       hasApiKey: provider === "claude-code" || Boolean(settings.encryptedKey)
     };
+  }
+
+  async commandCwd() {
+    const context = this.getContext();
+    if (context.mode === "remote") return this.userData;
+    return existingDirectory(context.project?.rootPath || context.root, this.userData);
   }
 
   async saveSettings(input) {
@@ -304,6 +348,61 @@ class AiManager {
     } catch {
       return { models: fallback, live: false };
     }
+  }
+
+  async claudeCodeStatus(input = {}) {
+    const settings = await this.readSettings();
+    const command = String(input.endpoint || settings.endpoint || "claude").trim() || "claude";
+    const cwd = await this.commandCwd();
+    let version = "";
+    try {
+      version = await runCommand(command, ["--version"], { cwd, timeout: 15000 });
+    } catch (error) {
+      return {
+        available: false,
+        loggedIn: false,
+        command,
+        version: "",
+        message: `Claude Code was not found at '${command}'. Install Claude Code or fix the command path, then try again. ${error.message}`.trim()
+      };
+    }
+    try {
+      const output = await runCommand(command, ["auth", "status"], { cwd, timeout: 15000 });
+      let account = "";
+      try {
+        const data = JSON.parse(output);
+        account = data.email || data.account?.email || data.user?.email || data.login || "";
+      } catch {}
+      return {
+        available: true,
+        loggedIn: true,
+        command,
+        version,
+        account,
+        message: account ? `Signed in as ${account}` : "Claude Code is signed in and ready."
+      };
+    } catch (error) {
+      return {
+        available: true,
+        loggedIn: false,
+        command,
+        version,
+        message: "Claude Code is installed, but this PC is not signed in yet. Click Login to open the Claude sign-in flow."
+      };
+    }
+  }
+
+  async launchClaudeCodeLogin(input = {}) {
+    const settings = await this.readSettings();
+    const command = String(input.endpoint || settings.endpoint || "claude").trim() || "claude";
+    const cwd = await this.commandCwd();
+    launchInteractiveCommand(command, ["auth", "login"], { cwd });
+    return {
+      available: true,
+      loggedIn: false,
+      command,
+      message: "Claude Code login opened. Finish the sign-in window, then click Check Login."
+    };
   }
 
   projectFiles() {
@@ -416,7 +515,7 @@ class AiManager {
     const apiKey = settings.encryptedKey ? this.decrypt(settings.encryptedKey) : "";
     const outputTokenLimit = Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000));
     if (settings.provider === "claude-code") {
-      const context = this.getContext();
+      const cwd = await this.commandCwd();
       const prompt = `${system}
 
 Output budget: keep the final JSON concise and under roughly ${outputTokenLimit} output tokens.
@@ -426,7 +525,7 @@ ${user}`;
       if (settings.model && settings.model !== "default") args.push("--model", settings.model);
       args.push(prompt);
       const stdout = await runCommand(String(settings.endpoint || "claude"), args, {
-        cwd: context.project?.rootPath || this.userData,
+        cwd,
         timeout: 240000
       });
       return unwrapClaudeCodeOutput(stdout);

@@ -56,6 +56,14 @@ test("uses Claude Code login mode through a local command without an API key", a
   context.after(() => fs.rm(temp, { recursive: true, force: true }));
   const fakeCli = path.join(temp, "fake-claude.js");
   await fs.writeFile(fakeCli, [
+    "if (process.argv.includes('--version')) {",
+    "  console.log('1.2.3-test');",
+    "  process.exit(0);",
+    "}",
+    "if (process.argv.includes('auth') && process.argv.includes('status')) {",
+    "  console.log(JSON.stringify({ email: 'neko@example.test' }));",
+    "  process.exit(0);",
+    "}",
     "const result = JSON.stringify({",
     "  response: 'Claude Code plan mode is connected.',",
     "  summary: 'No file changes needed.',",
@@ -84,6 +92,10 @@ test("uses Claude Code login mode through a local command without an API key", a
   assert.equal(settings.provider, "claude-code");
   assert.equal(settings.hasApiKey, true);
   assert.equal(settings.maxOutputTokens, 1536);
+  const status = await manager.claudeCodeStatus();
+  assert.equal(status.available, true);
+  assert.equal(status.loggedIn, true);
+  assert.equal(status.account, "neko@example.test");
   const proposal = await manager.propose("Check the server.");
   assert.match(proposal.response, /plan mode is connected/);
   assert.equal(proposal.files.length, 0);
