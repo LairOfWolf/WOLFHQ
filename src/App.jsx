@@ -99,6 +99,11 @@ const AI_MODEL_FALLBACKS = {
     { id: "gpt-5.4", name: "GPT-5.4" },
     { id: "gpt-5.4-mini", name: "GPT-5.4 mini" },
     { id: "gpt-5.4-nano", name: "GPT-5.4 nano" }
+  ],
+  "claude-code": [
+    { id: "default", name: "Claude Code default" },
+    { id: "opus", name: "Claude Code Opus" },
+    { id: "sonnet", name: "Claude Code Sonnet" }
   ]
 };
 
@@ -1338,14 +1343,20 @@ export default function App() {
 
   function changeAiProvider(provider) {
     const models = AI_MODEL_FALLBACKS[provider];
+    const defaults = {
+      anthropic: { model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages" },
+      "openai-compatible": { model: "gpt-5.4", endpoint: "https://api.openai.com/v1/responses" },
+      "claude-code": { model: "default", endpoint: "claude" }
+    };
+    const next = defaults[provider] || defaults.anthropic;
     setAiSettings((current) => ({
       ...current,
       provider,
-      model: provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4",
-      endpoint: provider === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/responses"
+      model: next.model,
+      endpoint: next.endpoint
     }));
     setAiModels(models);
-    setAiModelsLive(false);
+    setAiModelsLive(provider === "claude-code");
   }
 
   const resourceNames = useMemo(() => project?.resources?.slice(0, 8) || [], [project]);
@@ -2206,18 +2217,19 @@ export default function App() {
                       <aside className="ai-config">
                         <div className="ai-section-title"><KeyRound size={14} /> PROVIDER VAULT</div>
                         <label>Provider<select value={aiSettings.provider} onChange={(event) => changeAiProvider(event.target.value)}>
+                          <option value="claude-code">Claude Code Login</option>
                           <option value="anthropic">Anthropic API (Claude models)</option>
                           <option value="openai-compatible">OpenAI-compatible</option>
                         </select></label>
                         <label>Model<select value={aiSettings.model} onChange={(event) => changeAiModel(event.target.value)}>
                           {selectableAiModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
                         </select></label>
-                        <div className="ai-model-source"><Circle size={7} fill="currentColor" /> {aiModelsLive ? "LIVE MODELS FROM YOUR PROVIDER" : "CURRENT MODEL CATALOG"}</div>
-                        <label>API endpoint<input value={aiSettings.endpoint} onChange={(event) => setAiSettings({ ...aiSettings, endpoint: event.target.value })} /></label>
+                        <div className="ai-model-source"><Circle size={7} fill="currentColor" /> {aiSettings.provider === "claude-code" ? "USES YOUR LOCAL CLAUDE CODE LOGIN" : aiModelsLive ? "LIVE MODELS FROM YOUR PROVIDER" : "CURRENT MODEL CATALOG"}</div>
+                        <label>{aiSettings.provider === "claude-code" ? "Claude command" : "API endpoint"}<input value={aiSettings.endpoint} onChange={(event) => setAiSettings({ ...aiSettings, endpoint: event.target.value })} /></label>
                         <label>Limit tokens<input type="number" min="512" max="16000" step="256" value={aiSettings.maxOutputTokens || 4096} onChange={(event) => setAiSettings({ ...aiSettings, maxOutputTokens: Number(event.target.value) || 4096 })} /></label>
-                        <label>API key<input type="password" placeholder={aiSettings.hasApiKey ? "Encrypted key saved - leave blank to keep it" : "Enter provider API key"} value={aiSettings.apiKey} onChange={(event) => setAiSettings({ ...aiSettings, apiKey: event.target.value })} /></label>
-                        <button onClick={saveAiProvider}><ShieldCheck size={13} /> ENCRYPT AND SAVE</button>
-                        <div className="ai-security"><LockKeyhole size={14} /><span>Keys are encrypted by Windows. WOLFHQ sends your configured output token limit, but Claude Desktop/Pro usage limits are separate from Anthropic API access.</span></div>
+                        {aiSettings.provider !== "claude-code" && <label>API key<input type="password" placeholder={aiSettings.hasApiKey ? "Encrypted key saved - leave blank to keep it" : "Enter provider API key"} value={aiSettings.apiKey} onChange={(event) => setAiSettings({ ...aiSettings, apiKey: event.target.value })} /></label>}
+                        <button onClick={saveAiProvider}><ShieldCheck size={13} /> {aiSettings.provider === "claude-code" ? "SAVE CLAUDE CODE LOGIN MODE" : "ENCRYPT AND SAVE"}</button>
+                        <div className="ai-security"><LockKeyhole size={14} /><span>{aiSettings.provider === "claude-code" ? "WOLFHQ calls your local Claude Code CLI in print mode. Run `claude login` first so it uses your plan limits." : "Keys are encrypted by Windows. WOLFHQ sends your configured output token limit for every API provider."}</span></div>
 
                         <div className="ai-section-title search-title"><Search size={14} /> FILE INTELLIGENCE</div>
                         <div className="ai-search">

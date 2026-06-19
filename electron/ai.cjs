@@ -1,5 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { spawn } = require("node:child_process");
 
 const MAX_CONTEXT_FILES = 48;
 const MAX_CONTEXT_CHARS = 320000;
@@ -17,8 +18,18 @@ const FALLBACK_MODELS = {
     { id: "gpt-5.4", name: "GPT-5.4" },
     { id: "gpt-5.4-mini", name: "GPT-5.4 mini" },
     { id: "gpt-5.4-nano", name: "GPT-5.4 nano" }
+  ],
+  "claude-code": [
+    { id: "default", name: "Claude Code default" },
+    { id: "opus", name: "Claude Code Opus" },
+    { id: "sonnet", name: "Claude Code Sonnet" }
   ]
 };
+
+function normalizeProvider(value) {
+  if (value === "openai-compatible" || value === "claude-code") return value;
+  return "anthropic";
+}
 
 function flattenTree(nodes, files = []) {
   for (const node of nodes || []) {
@@ -75,6 +86,118 @@ async function mapLimit(items, limit, worker) {
   return results;
 }
 
+function splitCommandLine(value) {
+  const parts = [];
+  const input = String(value || "").trim();
+  let current = "";
+  let quote = "";
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if ((char === "\"" || char === "'") && !quote) {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      continue;
+    }
+    if (/\s/.test(char) && !quote) {
+      if (current) {
+        parts.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function quoteCmdArg(value) {
+  const text = String(value);
+  return `"${text.replace(/(["^&|<>%])/g, "^$1")}"`;
+}
+
+function runCommand(commandLine, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const commandParts = splitCommandLine(commandLine);
+    const command = commandParts.shift() || "claude";
+    const allArgs = [...commandParts, ...args];
+    let settled = false;
+    let child;
+    let activeChild;
+    let retryingThroughCmd = false;
+    let timeout;
+
+    const finish = (error, stdout = "") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(stdout.trim());
+    };
+
+    const attach = (processRef) => {
+      let stdout = "";
+      let stderr = "";
+      processRef.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+      processRef.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+      processRef.on("error", (error) => {
+        if (process.platform === "win32" && error.code === "ENOENT" && processRef === child) {
+          retryingThroughCmd = true;
+          const shellLine = [quoteCmdArg(command), ...allArgs.map(quoteCmdArg)].join(" ");
+          const retry = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", shellLine], {
+            cwd: options.cwd,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"]
+          });
+          activeChild = retry;
+          attach(retry);
+          return;
+        }
+        finish(error);
+      });
+      processRef.on("close", (code) => {
+        if (retryingThroughCmd && processRef === child) return;
+        if (code === 0) finish(null, stdout);
+        else finish(new Error((stderr || stdout || `Claude Code exited with code ${code}`).trim()));
+      });
+    };
+
+    child = spawn(command, allArgs, {
+      cwd: options.cwd,
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    activeChild = child;
+    timeout = setTimeout(() => {
+      activeChild?.kill();
+      finish(new Error("Claude Code did not respond before the WOLFHQ timeout."));
+    }, options.timeout || 180000);
+    attach(child);
+  });
+}
+
+function unwrapClaudeCodeOutput(stdout) {
+  const text = String(stdout || "").trim();
+  if (!text) return "";
+  try {
+    const data = JSON.parse(text);
+    if (typeof data.result === "string") return data.result;
+    if (typeof data.response === "string") return data.response;
+    if (typeof data.content === "string") return data.content;
+    if (Array.isArray(data.content)) return data.content.map((part) => part.text || part.content || "").join("\n");
+    if (data.message?.content) {
+      return Array.isArray(data.message.content)
+        ? data.message.content.map((part) => part.text || part.content || "").join("\n")
+        : String(data.message.content);
+    }
+  } catch {}
+  return text;
+}
+
 class AiManager {
   constructor(options) {
     this.userData = options.userData;
@@ -108,27 +231,30 @@ class AiManager {
 
   async getSettings() {
     const settings = await this.readSettings();
+    const provider = normalizeProvider(settings.provider);
     return {
-      provider: settings.provider,
+      provider,
       model: settings.model,
-      endpoint: settings.endpoint,
+      endpoint: provider === "claude-code" ? (settings.endpoint || "claude") : settings.endpoint,
       maxOutputTokens: Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000)),
-      hasApiKey: Boolean(settings.encryptedKey)
+      hasApiKey: provider === "claude-code" || Boolean(settings.encryptedKey)
     };
   }
 
   async saveSettings(input) {
     const current = await this.readSettings();
-    const provider = input.provider === "openai-compatible" ? "openai-compatible" : "anthropic";
-    const endpoint = String(input.endpoint || "").trim() || (provider === "anthropic"
+    const provider = normalizeProvider(input.provider);
+    const endpoint = String(input.endpoint || "").trim() || (provider === "claude-code"
+      ? "claude"
+      : provider === "anthropic"
       ? "https://api.anthropic.com/v1/messages"
       : "https://api.openai.com/v1/responses");
-    if (!/^https:\/\/|^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(endpoint)) {
+    if (provider !== "claude-code" && !/^https:\/\/|^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(endpoint)) {
       throw new Error("AI endpoints must use HTTPS, except local 127.0.0.1 or localhost providers.");
     }
     const next = {
       provider,
-      model: String(input.model || "").trim() || (provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4"),
+      model: String(input.model || "").trim() || (provider === "claude-code" ? "default" : provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4"),
       endpoint,
       maxOutputTokens: Math.max(512, Math.min(Number(input.maxOutputTokens) || current.maxOutputTokens || 4096, 16000)),
       encryptedKey: input.apiKey ? this.encrypt(String(input.apiKey).trim()) : current.encryptedKey || ""
@@ -139,14 +265,16 @@ class AiManager {
 
   async listModels() {
     const settings = await this.readSettings();
-    const fallback = FALLBACK_MODELS[settings.provider] || FALLBACK_MODELS["openai-compatible"];
+    const provider = normalizeProvider(settings.provider);
+    const fallback = FALLBACK_MODELS[provider] || FALLBACK_MODELS["openai-compatible"];
+    if (provider === "claude-code") return { models: fallback, live: true };
     const apiKey = settings.encryptedKey ? this.decrypt(settings.encryptedKey) : "";
     if (!apiKey && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(settings.endpoint)) {
       return { models: fallback, live: false };
     }
     const headers = {};
     let modelsEndpoint;
-    if (settings.provider === "anthropic") {
+    if (provider === "anthropic") {
       headers["x-api-key"] = apiKey;
       headers["anthropic-version"] = "2023-06-01";
       modelsEndpoint = new URL("/v1/models", settings.endpoint).toString();
@@ -169,7 +297,7 @@ class AiManager {
           name: String(model.display_name || model.name || model.id || "").trim()
         }))
         .filter((model) => model.id)
-        .filter((model) => settings.provider === "anthropic"
+        .filter((model) => provider === "anthropic"
           || !/(embedding|image|audio|transcri|realtime|tts|moderation|whisper|dall-e)/i.test(model.id))
         .sort((a, b) => a.name.localeCompare(b.name));
       return { models: discovered.length ? discovered : fallback, live: Boolean(discovered.length) };
@@ -284,11 +412,28 @@ class AiManager {
   }
 
   async callProvider(settings, system, user) {
+    settings = { ...settings, provider: normalizeProvider(settings.provider) };
     const apiKey = settings.encryptedKey ? this.decrypt(settings.encryptedKey) : "";
+    const outputTokenLimit = Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000));
+    if (settings.provider === "claude-code") {
+      const context = this.getContext();
+      const prompt = `${system}
+
+Output budget: keep the final JSON concise and under roughly ${outputTokenLimit} output tokens.
+
+${user}`;
+      const args = ["--print", "--output-format", "json"];
+      if (settings.model && settings.model !== "default") args.push("--model", settings.model);
+      args.push(prompt);
+      const stdout = await runCommand(String(settings.endpoint || "claude"), args, {
+        cwd: context.project?.rootPath || this.userData,
+        timeout: 240000
+      });
+      return unwrapClaudeCodeOutput(stdout);
+    }
     if (!apiKey && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(settings.endpoint)) {
       throw new Error("Add an AI API key in the AI workspace first.");
     }
-    const outputTokenLimit = Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000));
     const headers = { "Content-Type": "application/json" };
     let body;
     if (settings.provider === "anthropic") {

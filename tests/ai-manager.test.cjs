@@ -51,6 +51,44 @@ test("reports provider account rejection while keeping the configured token limi
   );
 });
 
+test("uses Claude Code login mode through a local command without an API key", async (context) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "wolfhq-claude-code-"));
+  context.after(() => fs.rm(temp, { recursive: true, force: true }));
+  const fakeCli = path.join(temp, "fake-claude.js");
+  await fs.writeFile(fakeCli, [
+    "const result = JSON.stringify({",
+    "  response: 'Claude Code plan mode is connected.',",
+    "  summary: 'No file changes needed.',",
+    "  files: []",
+    "});",
+    "console.log(JSON.stringify({ result }));"
+  ].join("\n"), "utf8");
+
+  const manager = new AiManager({
+    userData: temp,
+    encrypt: (value) => `encrypted:${value}`,
+    decrypt: (value) => value.replace(/^encrypted:/, ""),
+    getContext: () => ({ project: { rootPath: temp, tree: [] } }),
+    readText: async () => "",
+    writeText: async () => {},
+    createBackup: async () => {},
+    audit: async () => {}
+  });
+  await manager.saveSettings({
+    provider: "claude-code",
+    model: "default",
+    endpoint: `"${process.execPath}" "${fakeCli}"`,
+    maxOutputTokens: 1536
+  });
+  const settings = await manager.getSettings();
+  assert.equal(settings.provider, "claude-code");
+  assert.equal(settings.hasApiKey, true);
+  assert.equal(settings.maxOutputTokens, 1536);
+  const proposal = await manager.propose("Check the server.");
+  assert.match(proposal.response, /plan mode is connected/);
+  assert.equal(proposal.files.length, 0);
+});
+
 test("searches contents, validates a provider proposal, backs up, and applies selected files", async (context) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "wolfhq-ai-"));
   context.after(() => fs.rm(temp, { recursive: true, force: true }));
