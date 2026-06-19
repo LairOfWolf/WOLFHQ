@@ -1786,7 +1786,7 @@ export default function App() {
                     <CatalogDropdown label="Displayed protection system" value={antiCheatDisplay} options={antiCheatChoices} onChange={setAntiCheatDisplay} />
                     <div className="anti-cheat-toolbar-stat"><span>DETECTED</span><strong>{detectedAntiCheats.length}</strong></div>
                     <div className="anti-cheat-toolbar-stat"><span>ENABLED</span><strong>{detectedAntiCheats.filter((item) => item.status === "enabled").length}</strong></div>
-                    <button className={nekoInstalling ? "spinning" : ""} onClick={installNekoEngine} disabled={nekoInstalling}><ShieldAlert size={14} /> {nekoStatus.installed ? "REPAIR NEKO AC" : "INSTALL NEKO AC"}</button>
+                    <button className={`${nekoInstalling ? "spinning" : ""} ${nekoStatus.installed ? "installed" : ""}`} onClick={installNekoEngine} disabled={nekoInstalling}><ShieldAlert size={14} /> {nekoStatus.installed ? "REPAIR NEKO AC" : "INSTALL NEKO AC"}</button>
                     <button className={busy ? "spinning" : ""} onClick={rescan}><RefreshCw size={14} /> RESCAN SERVER</button>
                   </div>
 
@@ -1836,7 +1836,7 @@ export default function App() {
                               <div><span>RESOURCE</span><strong>{nekoStatus.resource || "neko-anticheat"}</strong></div>
                               <div><span>STATUS</span><strong>{nekoStatus.running ? "ONLINE" : nekoStatus.installed ? "INSTALLED" : "NOT INSTALLED"}</strong></div>
                             </div>
-                            <button className="neko-deploy" onClick={installNekoEngine} disabled={nekoInstalling}>{nekoInstalling ? <RefreshCw size={15} /> : <Download size={15} />} {nekoStatus.installed ? "REPAIR / REINSTALL ENGINE" : "INSTALL NEKO ANTI-CHEAT"}</button>
+                            <button className={`neko-deploy ${nekoStatus.installed ? "installed" : ""}`} onClick={installNekoEngine} disabled={nekoInstalling}>{nekoInstalling ? <RefreshCw size={15} /> : <Download size={15} />} {nekoStatus.installed ? "REPAIR / REINSTALL ENGINE" : "INSTALL NEKO ANTI-CHEAT"}</button>
                             {nekoStatus.error && <p className="neko-status-warning">{nekoStatus.error}</p>}
                           </div>
                         ) : selectedAntiCheat ? (
