@@ -64,12 +64,22 @@ test("uses Claude Code login mode through a local command without an API key", a
     "  console.log(JSON.stringify({ email: 'neko@example.test' }));",
     "  process.exit(0);",
     "}",
+    "if (process.argv.includes('auth') && process.argv.includes('logout')) {",
+    "  console.log('Logged out');",
+    "  process.exit(0);",
+    "}",
+    "let input = '';",
+    "process.stdin.setEncoding('utf8');",
+    "process.stdin.on('data', (chunk) => { input += chunk; });",
+    "process.stdin.on('end', () => {",
+    "if (!input.includes('Output budget')) process.exit(7);",
     "const result = JSON.stringify({",
     "  response: 'Claude Code plan mode is connected.',",
     "  summary: 'No file changes needed.',",
     "  files: []",
     "});",
-    "console.log(JSON.stringify({ result }));"
+    "console.log(JSON.stringify({ result }));",
+    "});"
   ].join("\n"), "utf8");
 
   const manager = new AiManager({
@@ -96,6 +106,8 @@ test("uses Claude Code login mode through a local command without an API key", a
   assert.equal(status.available, true);
   assert.equal(status.loggedIn, true);
   assert.equal(status.account, "neko@example.test");
+  const logout = await manager.logoutClaudeCode();
+  assert.equal(logout.loggedIn, false);
   const proposal = await manager.propose("Check the server.");
   assert.match(proposal.response, /plan mode is connected/);
   assert.equal(proposal.files.length, 0);

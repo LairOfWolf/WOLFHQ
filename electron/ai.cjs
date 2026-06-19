@@ -156,6 +156,9 @@ function runCommand(commandLine, args, options = {}) {
     const attach = (processRef) => {
       let stdout = "";
       let stderr = "";
+      processRef.stdin?.on("error", () => {});
+      if (typeof options.input === "string") processRef.stdin?.end(options.input);
+      else processRef.stdin?.end();
       processRef.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
       processRef.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
       processRef.on("error", (error) => {
@@ -165,7 +168,7 @@ function runCommand(commandLine, args, options = {}) {
           const retry = spawn(windowsCmdPath(), ["/d", "/s", "/c", shellLine], {
             cwd: options.cwd,
             windowsHide: true,
-            stdio: ["ignore", "pipe", "pipe"]
+            stdio: ["pipe", "pipe", "pipe"]
           });
           activeChild = retry;
           attach(retry);
@@ -184,7 +187,7 @@ function runCommand(commandLine, args, options = {}) {
       cwd: options.cwd,
       shell: false,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"]
     });
     activeChild = child;
     timeout = setTimeout(() => {
@@ -405,6 +408,19 @@ class AiManager {
     };
   }
 
+  async logoutClaudeCode(input = {}) {
+    const settings = await this.readSettings();
+    const command = String(input.endpoint || settings.endpoint || "claude").trim() || "claude";
+    const cwd = await this.commandCwd();
+    await runCommand(command, ["auth", "logout"], { cwd, timeout: 30000 });
+    return {
+      available: true,
+      loggedIn: false,
+      command,
+      message: "Claude Code logged out on this PC."
+    };
+  }
+
   projectFiles() {
     const context = this.getContext();
     if (!context.project) throw new Error("Connect a server before using AI.");
@@ -521,11 +537,11 @@ class AiManager {
 Output budget: keep the final JSON concise and under roughly ${outputTokenLimit} output tokens.
 
 ${user}`;
-      const args = ["--print", "--output-format", "json"];
+      const args = ["--print", "--output-format", "json", "--input-format", "text"];
       if (settings.model && settings.model !== "default") args.push("--model", settings.model);
-      args.push(prompt);
       const stdout = await runCommand(String(settings.endpoint || "claude"), args, {
         cwd,
+        input: prompt,
         timeout: 240000
       });
       return unwrapClaudeCodeOutput(stdout);

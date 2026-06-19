@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
+import packageInfo from "../package.json";
 import {
   Activity, AlertTriangle, Archive, Ban, BarChart3, Bell, Box, Braces, Check, ChevronDown, ChevronRight, Circle,
   Clock, Cloud, Code2, Cpu, Database, Download, ExternalLink, File, FileCode2, FileJson, Folder, FolderOpen, Gauge,
@@ -66,6 +67,7 @@ const api = window.neonCore || {
   getAiModels: async () => ({ models: [], live: false }),
   getClaudeCodeStatus: async () => ({ available: false, loggedIn: false, message: "Claude Code status is unavailable in preview mode." }),
   loginClaudeCode: async () => ({ available: false, loggedIn: false, message: "Claude Code login is unavailable in preview mode." }),
+  logoutClaudeCode: async () => ({ available: true, loggedIn: false, message: "Claude Code logged out in preview mode." }),
   searchAiFiles: async () => ({ indexedFiles: 0, results: [] }),
   proposeAiChanges: async () => ({ summary: "", indexedFiles: 0, contextFiles: 0, files: [] }),
   applyAiChanges: async () => null,
@@ -80,6 +82,7 @@ const api = window.neonCore || {
   close: () => {}
 };
 const EMPTY_STATUS = { online: false, players: [], playerCount: 0, maxPlayers: 0, process: null };
+const APP_VERSION = packageInfo.version;
 const OPERATIONS_VIEWS = new Set(["performance", "backups", "fleet", "git", "database", "automation", "accounts", "history", "ai"]);
 const ANTI_CHEAT_MODULES = [
   { name: "PLAYER INTEGRITY", detail: "Godmode, health, armour, invisibility", icon: ShieldCheck },
@@ -1308,6 +1311,22 @@ export default function App() {
     }
   }
 
+  async function logoutClaudeCode() {
+    if (claudeCodeBusy) return;
+    setClaudeCodeBusy(true);
+    try {
+      const result = await api.logoutClaudeCode({ endpoint: aiSettings.endpoint || "claude" });
+      setClaudeCodeStatus(result);
+      notify(result.message);
+    } catch (error) {
+      const result = { available: true, loggedIn: true, message: cleanErrorMessage(error.message) };
+      setClaudeCodeStatus(result);
+      notify(result.message);
+    } finally {
+      setClaudeCodeBusy(false);
+    }
+  }
+
   async function changeAiModel(model) {
     const next = { ...aiSettings, model };
     setAiSettings(next);
@@ -1482,7 +1501,7 @@ export default function App() {
       <header className="titlebar">
         <div className="brand-lockup">
           <img className="brand-logo" src="./assets/wolfhq-icon.png" alt="WOLFHQ" />
-          <div><strong>WOLFHQ</strong><span>FIVEM COMMAND CENTER // v2.1</span></div>
+          <div><strong>WOLFHQ</strong><span>FIVEM COMMAND CENTER // v{APP_VERSION}</span></div>
         </div>
         <div className="system-strip">
           <span><Circle size={7} fill={status.online ? "#58ffd1" : "#ff577f"} /> {status.online ? "SERVER LINKED" : isRemote ? "SSH CONNECTED" : "LOCAL MODE"}</span>
@@ -2282,7 +2301,9 @@ export default function App() {
                             <div><Terminal size={15} /><span><strong>{claudeCodeStatus.loggedIn ? "CLAUDE CODE CONNECTED" : claudeCodeStatus.available ? "CLAUDE CODE NEEDS LOGIN" : "CLAUDE CODE NOT FOUND"}</strong><small>{claudeCodeStatus.message}</small></span></div>
                             <div className="ai-login-actions">
                               <button type="button" onClick={() => refreshClaudeCodeLogin(aiSettings.endpoint)} disabled={claudeCodeBusy}><RefreshCw size={13} /> CHECK LOGIN</button>
-                              <button type="button" onClick={startClaudeCodeLogin} disabled={claudeCodeBusy}><ExternalLink size={13} /> LOGIN</button>
+                              <button type="button" className={claudeCodeStatus.loggedIn ? "logout" : ""} onClick={claudeCodeStatus.loggedIn ? logoutClaudeCode : startClaudeCodeLogin} disabled={claudeCodeBusy}>
+                                {claudeCodeStatus.loggedIn ? <X size={13} /> : <ExternalLink size={13} />} {claudeCodeStatus.loggedIn ? "LOGOUT" : "LOGIN"}
+                              </button>
                             </div>
                           </div>
                         )}

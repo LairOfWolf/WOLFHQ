@@ -570,6 +570,7 @@ button { color: inherit; }
 .ai-login-actions { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .ai-login-actions button { min-height: 30px; border: 1px solid rgba(80, 223, 249, .24); background: rgba(80, 223, 249, .055); color: var(--cyan); display: flex; align-items: center; justify-content: center; gap: 6px; font: 7px "JetBrains Mono"; cursor: pointer; }
 .ai-login-actions button:last-child { border-color: rgba(88, 255, 209, .28); color: var(--green); background: rgba(88, 255, 209, .055); }
+.ai-login-actions button.logout { border-color: rgba(255, 93, 145, .34); color: #ff9cbc; background: rgba(255, 76, 139, .06); }
 .ai-login-actions button:disabled { opacity: .42; cursor: default; }
 .ai-security { margin-top: 9px; padding: 8px; border: 1px solid rgba(88, 255, 209, .12); display: flex; gap: 7px; color: #557267; background: rgba(88, 255, 209, .025); font: 7px/1.5 "JetBrains Mono"; }
 .ai-security svg { flex: none; color: var(--green); }

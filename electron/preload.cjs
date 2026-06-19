@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld("neonCore", {
   getAiModels: () => ipcRenderer.invoke("ai:models"),
   getClaudeCodeStatus: (input) => ipcRenderer.invoke("ai:claude-status", input),
   loginClaudeCode: (input) => ipcRenderer.invoke("ai:claude-login", input),
+  logoutClaudeCode: (input) => ipcRenderer.invoke("ai:claude-logout", input),
   searchAiFiles: (query) => ipcRenderer.invoke("ai:search", query),
   proposeAiChanges: (prompt) => ipcRenderer.invoke("ai:propose", prompt),
   applyAiChanges: (changes) => ipcRenderer.invoke("ai:apply", changes),
