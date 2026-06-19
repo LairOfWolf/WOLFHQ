@@ -1,5 +1,5 @@
 const NEKO_ANTI_CHEAT_RESOURCE = "neko-anticheat";
-const NEKO_ANTI_CHEAT_VERSION = "1.0.1";
+const NEKO_ANTI_CHEAT_VERSION = "1.0.2";
 
 function nekoAntiCheatFiles(profile = "Balanced") {
   const safeProfile = ["Monitor", "Balanced", "Strict"].includes(profile) ? profile : "Balanced";
@@ -156,6 +156,28 @@ CreateThread(function()
         end
     end
 end)
+
+RegisterNetEvent('nekoac:spectate', function(targetServerId)
+    local target = GetPlayerFromServerId(tonumber(targetServerId) or -1)
+    if target == -1 or not NetworkIsPlayerActive(target) then
+        TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectate target is not online.' } })
+        return
+    end
+    local targetPed = GetPlayerPed(target)
+    if not targetPed or targetPed == 0 then
+        TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectate target ped is not ready yet.' } })
+        return
+    end
+    NetworkSetInSpectatorMode(true, targetPed)
+    SetFocusEntity(targetPed)
+    TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectating server ID ' .. tostring(targetServerId) .. '. Use WOLFHQ Stop Spectate to exit.' } })
+end)
+
+RegisterNetEvent('nekoac:stopSpectate', function()
+    NetworkSetInSpectatorMode(false, PlayerPedId())
+    ClearFocus()
+    TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectate stopped.' } })
+end)
 `;
   const server = `local RESOURCE = GetCurrentResourceName()
 local TOKEN = (LoadResourceFile(RESOURCE, '.neko-token') or ''):gsub('%s+$', '')
@@ -308,6 +330,14 @@ local function getFrameworkInventory(source)
         end
     end
     return inventory
+end
+
+local function playerOnline(source)
+    source = tonumber(source) or -1
+    for _, playerId in ipairs(GetPlayers()) do
+        if tonumber(playerId) == source then return true end
+    end
+    return false
 end
 
 local function hasBan(source)
@@ -503,6 +533,19 @@ SetHttpHandler(function(req, res)
             incidents = {}
             saveJson(INCIDENTS_FILE, incidents)
             return sendJson(res, 200, statusPayload())
+        end
+        if req.method == 'POST' and req.path:match('/spectate$') then
+            local watcher = tonumber(payload.watcher)
+            local target = tonumber(payload.target)
+            local action = tostring(payload.action or 'start')
+            if not watcher or not playerOnline(watcher) then return sendJson(res, 400, { ok = false, error = 'Watcher server ID is not online.' }) end
+            if action == 'stop' then
+                TriggerClientEvent('nekoac:stopSpectate', watcher)
+                return sendJson(res, 200, { ok = true, action = 'stop', watcher = watcher })
+            end
+            if not target or not playerOnline(target) then return sendJson(res, 400, { ok = false, error = 'Target server ID is not online.' }) end
+            TriggerClientEvent('nekoac:spectate', watcher, target)
+            return sendJson(res, 200, { ok = true, action = 'start', watcher = watcher, target = target })
         end
         return sendJson(res, 404, { ok = false, error = 'route not found' })
     end)

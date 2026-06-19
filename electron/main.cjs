@@ -1609,6 +1609,13 @@ ipcMain.handle("neko:status", (_event, endpoint) => getNekoAntiCheatStatus(endpo
 ipcMain.handle("neko:profile", (_event, endpoint, profile) =>
   callNekoAntiCheat(endpoint, "profile", { profile: String(profile || "Balanced") })
 );
+ipcMain.handle("neko:spectate", (_event, endpoint, options) =>
+  callNekoAntiCheat(endpoint, "spectate", {
+    watcher: Number(options?.watcher),
+    target: Number(options?.target),
+    action: options?.action === "stop" ? "stop" : "start"
+  })
+);
 ipcMain.handle("control:announce", (_event, endpoint, message) =>
   callControl(endpoint, "announce", { message: String(message || "").trim() })
 );

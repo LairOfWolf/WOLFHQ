@@ -930,26 +930,40 @@ button { color: inherit; }
 .neko-incident-feed em { color: #b99662; font: 8px/1.4 "JetBrains Mono"; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .neko-empty-warning { min-height: 42px; padding: 8px; border: 1px solid rgba(88, 255, 209, .12); background: rgba(88, 255, 209, .025); color: var(--green); display: flex; align-items: center; gap: 8px; font: 8px "JetBrains Mono"; }
 .neko-click-hint { margin-top: 10px; min-height: 32px; padding: 0 9px; border: 1px solid rgba(80, 223, 249, .1); color: #74a5ba; display: flex; align-items: center; gap: 7px; font: 8px "JetBrains Mono"; background: rgba(80, 223, 249, .025); }
-.neko-player-modal { padding: 16px; }
-.neko-player-hero { min-height: 76px; padding: 14px; border: 1px solid rgba(255, 76, 139, .18); background: radial-gradient(circle at 100% 0, rgba(255, 76, 139, .12), transparent 35%), rgba(7, 10, 22, .92); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.neko-player-modal { padding: 18px; color: #d7ecf7; }
+.neko-player-hero { min-height: 92px; padding: 18px; border: 1px solid rgba(255, 76, 139, .26); background: radial-gradient(circle at 100% 0, rgba(255, 76, 139, .14), transparent 35%), rgba(7, 10, 22, .96); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .neko-player-hero > div { min-width: 0; display: flex; align-items: center; gap: 12px; }
 .neko-player-hero svg { color: #ff6fa1; filter: drop-shadow(0 0 8px rgba(255, 76, 139, .35)); }
 .neko-player-hero span { min-width: 0; display: flex; flex-direction: column; }
-.neko-player-hero strong { color: #ffeaf1; font-size: 22px; letter-spacing: 1px; }
-.neko-player-hero small { margin-top: 4px; color: #9a7c8f; font: 9px "JetBrains Mono"; }
-.neko-player-hero i { padding: 7px 9px; border: 1px solid rgba(255, 193, 74, .25); color: #ffc14a; background: rgba(255, 193, 74, .05); font: 8px "JetBrains Mono"; font-style: normal; white-space: nowrap; }
+.neko-player-hero strong { color: #fff4f8; font-size: 28px; letter-spacing: 1px; }
+.neko-player-hero small { margin-top: 6px; color: #d0a9bc; font: 13px "JetBrains Mono"; }
+.neko-player-hero i { padding: 9px 12px; border: 1px solid rgba(255, 193, 74, .32); color: #ffd36e; background: rgba(255, 193, 74, .08); font: 11px "JetBrains Mono"; font-style: normal; white-space: nowrap; }
+.neko-spectate-controls { margin-top: 12px; padding: 12px; border: 1px solid rgba(80, 223, 249, .18); background: rgba(80, 223, 249, .045); display: grid; grid-template-columns: minmax(180px, .8fr) minmax(150px, auto) minmax(150px, auto); gap: 9px; align-items: end; }
+.neko-spectate-controls label { display: flex; flex-direction: column; gap: 5px; color: #a8cad8; font: 12px "JetBrains Mono"; letter-spacing: .5px; }
+.neko-spectate-controls input { height: 42px; padding: 0 12px; border: 1px solid rgba(80, 223, 249, .28); background: #07101f; color: #e8fbff; outline: 0; font: 15px "JetBrains Mono"; }
+.neko-spectate-controls button { height: 42px; border: 1px solid rgba(88, 255, 209, .4); background: rgba(88, 255, 209, .1); color: #aaffeb; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; font: 11px "JetBrains Mono"; }
+.neko-spectate-controls button.stop { border-color: rgba(255, 113, 143, .38); background: rgba(255, 113, 143, .08); color: #ffb3c5; }
+.neko-spectate-controls span { grid-column: 1 / -1; color: #8aa6b7; font: 12px/1.5 "JetBrains Mono"; }
 .neko-live-grid.modal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.modal-location { min-height: 36px; }
+.neko-player-modal .neko-live-grid { gap: 8px; }
+.neko-player-modal .neko-live-grid div { min-height: 58px; padding: 10px 12px; border-color: rgba(88, 255, 209, .18); background: rgba(8, 18, 31, .92); }
+.neko-player-modal .neko-live-grid span { color: #86b7b1; font: 10px "JetBrains Mono"; letter-spacing: .5px; }
+.neko-player-modal .neko-live-grid strong { color: #e2fff7; font: 15px "Rajdhani"; letter-spacing: .4px; }
+.modal-location { min-height: 44px; font-size: 13px; color: #b9e9e1; }
 .neko-modal-columns { margin-top: 10px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 10px; }
-.neko-ident-panel { min-width: 0; padding: 10px; border: 1px solid rgba(105, 136, 168, .12); background: rgba(5, 9, 19, .72); }
-.neko-ident-panel > span, .neko-modal-flags > span { display: flex; align-items: center; gap: 7px; color: #ff9fbd; font: 8px "JetBrains Mono"; }
-.neko-ident-panel code { display: block; margin-top: 6px; padding: 6px; border: 1px solid rgba(80, 223, 249, .1); color: #9dcde0; background: rgba(80, 223, 249, .025); font: 8px "JetBrains Mono"; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.neko-ident-panel p, .neko-modal-flags p { margin: 8px 0 0; color: #6f6170; font: 8px/1.45 "JetBrains Mono"; }
-.neko-modal-flags { margin-top: 10px; padding: 10px; border: 1px solid rgba(255, 193, 74, .14); background: rgba(255, 193, 74, .025); }
-.neko-modal-flags > div { margin-top: 6px; min-height: 38px; padding: 7px; border: 1px solid rgba(255, 193, 74, .12); display: grid; grid-template-columns: minmax(130px, .7fr) minmax(120px, .5fr) minmax(180px, 1.2fr); align-items: center; gap: 8px; }
-.neko-modal-flags strong { color: #ffd892; font-size: 9px; }
-.neko-modal-flags small { color: #9e8050; font: 7px "JetBrains Mono"; }
-.neko-modal-flags em { color: #c7a36a; font: 8px "JetBrains Mono"; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neko-player-modal .neko-inventory-panel > span { color: #ffbdd2; font: 12px "JetBrains Mono"; }
+.neko-player-modal .neko-inventory-panel b { padding: 9px 10px; color: #e3f5ff; font: 12px "JetBrains Mono"; }
+.neko-player-modal .neko-inventory-panel b small { font-size: 12px; }
+.neko-player-modal .neko-inventory-panel p { color: #b69caf; font-size: 12px; }
+.neko-ident-panel { min-width: 0; padding: 12px; border: 1px solid rgba(105, 136, 168, .18); background: rgba(5, 9, 19, .82); }
+.neko-ident-panel > span, .neko-modal-flags > span { display: flex; align-items: center; gap: 7px; color: #ffbdd2; font: 12px "JetBrains Mono"; }
+.neko-ident-panel code { display: block; margin-top: 7px; padding: 9px; border: 1px solid rgba(80, 223, 249, .16); color: #c7f1ff; background: rgba(80, 223, 249, .035); font: 12px "JetBrains Mono"; overflow-wrap: anywhere; white-space: normal; }
+.neko-ident-panel p, .neko-modal-flags p { margin: 8px 0 0; color: #b69caf; font: 12px/1.5 "JetBrains Mono"; }
+.neko-modal-flags { margin-top: 10px; padding: 12px; border: 1px solid rgba(255, 193, 74, .18); background: rgba(255, 193, 74, .035); }
+.neko-modal-flags > div { margin-top: 8px; min-height: 48px; padding: 10px; border: 1px solid rgba(255, 193, 74, .16); display: grid; grid-template-columns: minmax(150px, .7fr) minmax(150px, .5fr) minmax(220px, 1.2fr); align-items: center; gap: 10px; }
+.neko-modal-flags strong { color: #ffe0a0; font-size: 12px; }
+.neko-modal-flags small { color: #caa263; font: 11px "JetBrains Mono"; }
+.neko-modal-flags em { color: #e5c58a; font: 12px "JetBrains Mono"; font-style: normal; overflow-wrap: anywhere; }
 .anti-empty-feed { min-height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #5c4050; text-align: center; }
 .anti-empty-feed strong { margin-top: 8px; color: #876a79; font-size: 11px; }
 .anti-empty-feed p { max-width: 470px; color: #625a67; font: 8px/1.55 "JetBrains Mono"; }
@@ -962,7 +976,7 @@ button { color: inherit; }
 .modal { width: min(500px, 90vw); border: 1px solid rgba(80, 223, 249, .3); background: #090e1d; box-shadow: 0 0 60px rgba(58, 63, 178, .2); }
 .modal:has(.remote-form) { width: min(700px, 92vw); max-height: 90vh; overflow: auto; }
 .modal:has(.database-edit-form) { width: min(820px, 94vw); }
-.modal:has(.neko-player-modal) { width: min(1040px, 94vw); max-height: 90vh; overflow: auto; border-color: rgba(255, 76, 139, .34); }
+.modal:has(.neko-player-modal) { width: min(1180px, 96vw); max-height: 92vh; overflow: auto; border-color: rgba(255, 76, 139, .42); background: #070c19; }
 .modal-head { height: 48px; padding: 0 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .modal-head > div { display: flex; gap: 8px; align-items: center; color: var(--cyan); letter-spacing: 1px; font-size: 12px; }
 .modal-head button { border: 0; background: none; color: #607990; cursor: pointer; }

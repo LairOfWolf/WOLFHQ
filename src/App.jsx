@@ -33,6 +33,7 @@ const api = window.neonCore || {
   installNekoAntiCheat: async () => null,
   getNekoAntiCheatStatus: async () => ({ installed: false, running: false, incidents: [], players: [] }),
   setNekoAntiCheatProfile: async () => null,
+  spectateNekoPlayer: async () => null,
   sendAnnouncement: async () => null,
   restartServer: async () => null,
   getOpsDashboard: async () => ({ metrics: [], notes: {}, playerHistory: [], audit: [], accounts: [], current: null, settings: {} }),
@@ -301,6 +302,7 @@ export default function App() {
   const [nekoStatus, setNekoStatus] = useState({ installed: false, running: false, incidents: [], players: [], incidentCount: 0, banCount: 0, profile: "Balanced", modules: {} });
   const [nekoInstalling, setNekoInstalling] = useState(false);
   const [inspectedNekoPlayerId, setInspectedNekoPlayerId] = useState(null);
+  const [spectatorServerId, setSpectatorServerId] = useState("");
   const [playerDetails, setPlayerDetails] = useState([]);
   const [playerModal, setPlayerModal] = useState(null);
   const [consoleCommand, setConsoleCommand] = useState("");
@@ -790,6 +792,20 @@ export default function App() {
       const result = await api.setNekoAntiCheatProfile(endpoint, profile);
       setNekoStatus(result);
       notify(`Neko Anti-Cheat profile set to ${profile}`);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function controlNekoSpectate(action, targetId) {
+    const watcher = Number(spectatorServerId);
+    if (!watcher) {
+      notify("Enter your own in-game server ID as the watcher before spectating.");
+      return;
+    }
+    try {
+      await api.spectateNekoPlayer(endpoint, { watcher, target: Number(targetId), action });
+      notify(action === "stop" ? "Spectate stopped in-game" : `Spectating server ID ${targetId} in-game`);
     } catch (error) {
       notify(error.message);
     }
@@ -2437,6 +2453,12 @@ export default function App() {
             <div className="neko-player-hero">
               <div><Eye size={24} /><span><strong>{inspectedNekoPlayer.name}</strong><small>Server ID #{inspectedNekoPlayer.id} // {inspectedNekoPlayer.ping ?? "--"} ms ping // score {inspectedNekoPlayer.score ?? 0}</small></span></div>
               <i>{inspectedNekoPlayer.flags?.length ? `${inspectedNekoPlayer.flags.length} RECENT FLAGS` : "CLEAR"}</i>
+            </div>
+            <div className="neko-spectate-controls">
+              <label>Your in-game server ID<input value={spectatorServerId} onChange={(event) => setSpectatorServerId(event.target.value.replace(/\D/g, ""))} placeholder="Example: 1" /></label>
+              <button type="button" onClick={() => controlNekoSpectate("start", inspectedNekoPlayer.id)}><Eye size={16} /> START SPECTATE</button>
+              <button type="button" className="stop" onClick={() => controlNekoSpectate("stop", inspectedNekoPlayer.id)}><X size={16} /> STOP SPECTATE</button>
+              <span>WOLFHQ triggers your live FiveM client to spectate this player. You must be connected in-game.</span>
             </div>
             <div className="neko-live-grid modal-grid">
               <div><span>HEALTH</span><strong>{inspectedNekoPlayer.telemetry?.health ?? "--"}</strong></div>
