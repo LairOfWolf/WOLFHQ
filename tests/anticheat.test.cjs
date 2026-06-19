@@ -38,7 +38,7 @@ test("generates the installable Neko Anti-Cheat resource files", () => {
   assert.match(files.config, /NekoAC\.profile = 'Strict'/);
   assert.match(files.client, /nekoac:heartbeat/);
   assert.match(files.client, /nekoac:spectate/);
-  assert.match(files.client, /RegisterCommand\('niko'/);
+  assert.match(files.client, /RegisterCommand\('neko'/);
   assert.match(files.guard, /nekoac:resourceGuard/);
   assert.match(files.uiHtml, /NEKO ANTI-CHEAT/);
   assert.match(files.uiCss, /#app/);

@@ -194,7 +194,7 @@ RegisterNetEvent('nekoac:stopSpectate', function()
     TriggerEvent('chat:addMessage', { args = { 'NekoAC', 'Spectate stopped.' } })
 end)
 
-RegisterCommand('niko', function()
+RegisterCommand('neko', function()
     adminOpen = not adminOpen
     SetNuiFocus(adminOpen, adminOpen)
     SendNUIMessage({ type = adminOpen and 'open' or 'close' })
@@ -262,7 +262,7 @@ end)
           <div id="incidents"></div>
         </article>
       </section>
-      <footer>Run /niko to toggle this panel. Spectate runs inside your current FiveM client.</footer>
+      <footer>Run /neko to toggle this panel. Spectate runs inside your current FiveM client.</footer>
     </main>
     <script src="app.js"></script>
   </body>
