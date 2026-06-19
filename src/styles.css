@@ -890,6 +890,11 @@ button { color: inherit; }
 .anti-module-grid > div.active { border-color: rgba(88, 255, 209, .18); background: linear-gradient(120deg, rgba(88, 255, 209, .06), rgba(8, 12, 25, .78)); }
 .anti-module-grid > div.active > svg { color: var(--green); filter: drop-shadow(0 0 7px rgba(88, 255, 209, .28)); }
 .anti-module-grid > div.active i { color: var(--green); }
+.neko-version-panel, .neko-warning-panel { min-height: 180px; }
+.neko-version-card { min-height: 100px; padding: 14px; border: 1px solid rgba(88, 255, 209, .18); background: radial-gradient(circle at 100% 0, rgba(88, 255, 209, .1), transparent 35%), rgba(6, 12, 22, .82); display: flex; flex-direction: column; justify-content: center; }
+.neko-version-card strong { color: #e2fff7; font-size: 30px; letter-spacing: 1.4px; }
+.neko-version-card span { margin-top: 6px; color: #8bbab0; font: 9px/1.55 "JetBrains Mono"; }
+.neko-version-card i { margin-top: 12px; color: var(--green); font: 8px "JetBrains Mono"; font-style: normal; }
 .anti-player-list { max-height: 190px; overflow: auto; }
 .anti-player-list > button { width: 100%; min-height: 38px; padding: 0 8px; border: 0; border-bottom: 1px solid rgba(105, 136, 168, .08); background: transparent; display: grid; grid-template-columns: 70px minmax(120px, 1fr) 70px 120px; align-items: center; color: #756878; font: 8px "JetBrains Mono"; text-align: left; cursor: pointer; }
 .anti-player-list > button:hover, .anti-player-list > button.active { background: rgba(255, 75, 136, .05); box-shadow: inset 2px 0 #ff5990; }
@@ -923,6 +928,28 @@ button { color: inherit; }
 .neko-incident-feed strong { color: #ffd892; font-size: 9px; }
 .neko-incident-feed small { margin-top: 3px; color: #8e7650; font: 7px "JetBrains Mono"; }
 .neko-incident-feed em { color: #b99662; font: 8px/1.4 "JetBrains Mono"; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neko-empty-warning { min-height: 42px; padding: 8px; border: 1px solid rgba(88, 255, 209, .12); background: rgba(88, 255, 209, .025); color: var(--green); display: flex; align-items: center; gap: 8px; font: 8px "JetBrains Mono"; }
+.neko-click-hint { margin-top: 10px; min-height: 32px; padding: 0 9px; border: 1px solid rgba(80, 223, 249, .1); color: #74a5ba; display: flex; align-items: center; gap: 7px; font: 8px "JetBrains Mono"; background: rgba(80, 223, 249, .025); }
+.neko-player-modal { padding: 16px; }
+.neko-player-hero { min-height: 76px; padding: 14px; border: 1px solid rgba(255, 76, 139, .18); background: radial-gradient(circle at 100% 0, rgba(255, 76, 139, .12), transparent 35%), rgba(7, 10, 22, .92); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.neko-player-hero > div { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.neko-player-hero svg { color: #ff6fa1; filter: drop-shadow(0 0 8px rgba(255, 76, 139, .35)); }
+.neko-player-hero span { min-width: 0; display: flex; flex-direction: column; }
+.neko-player-hero strong { color: #ffeaf1; font-size: 22px; letter-spacing: 1px; }
+.neko-player-hero small { margin-top: 4px; color: #9a7c8f; font: 9px "JetBrains Mono"; }
+.neko-player-hero i { padding: 7px 9px; border: 1px solid rgba(255, 193, 74, .25); color: #ffc14a; background: rgba(255, 193, 74, .05); font: 8px "JetBrains Mono"; font-style: normal; white-space: nowrap; }
+.neko-live-grid.modal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.modal-location { min-height: 36px; }
+.neko-modal-columns { margin-top: 10px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 10px; }
+.neko-ident-panel { min-width: 0; padding: 10px; border: 1px solid rgba(105, 136, 168, .12); background: rgba(5, 9, 19, .72); }
+.neko-ident-panel > span, .neko-modal-flags > span { display: flex; align-items: center; gap: 7px; color: #ff9fbd; font: 8px "JetBrains Mono"; }
+.neko-ident-panel code { display: block; margin-top: 6px; padding: 6px; border: 1px solid rgba(80, 223, 249, .1); color: #9dcde0; background: rgba(80, 223, 249, .025); font: 8px "JetBrains Mono"; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neko-ident-panel p, .neko-modal-flags p { margin: 8px 0 0; color: #6f6170; font: 8px/1.45 "JetBrains Mono"; }
+.neko-modal-flags { margin-top: 10px; padding: 10px; border: 1px solid rgba(255, 193, 74, .14); background: rgba(255, 193, 74, .025); }
+.neko-modal-flags > div { margin-top: 6px; min-height: 38px; padding: 7px; border: 1px solid rgba(255, 193, 74, .12); display: grid; grid-template-columns: minmax(130px, .7fr) minmax(120px, .5fr) minmax(180px, 1.2fr); align-items: center; gap: 8px; }
+.neko-modal-flags strong { color: #ffd892; font-size: 9px; }
+.neko-modal-flags small { color: #9e8050; font: 7px "JetBrains Mono"; }
+.neko-modal-flags em { color: #c7a36a; font: 8px "JetBrains Mono"; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .anti-empty-feed { min-height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #5c4050; text-align: center; }
 .anti-empty-feed strong { margin-top: 8px; color: #876a79; font-size: 11px; }
 .anti-empty-feed p { max-width: 470px; color: #625a67; font: 8px/1.55 "JetBrains Mono"; }
@@ -935,6 +962,7 @@ button { color: inherit; }
 .modal { width: min(500px, 90vw); border: 1px solid rgba(80, 223, 249, .3); background: #090e1d; box-shadow: 0 0 60px rgba(58, 63, 178, .2); }
 .modal:has(.remote-form) { width: min(700px, 92vw); max-height: 90vh; overflow: auto; }
 .modal:has(.database-edit-form) { width: min(820px, 94vw); }
+.modal:has(.neko-player-modal) { width: min(1040px, 94vw); max-height: 90vh; overflow: auto; border-color: rgba(255, 76, 139, .34); }
 .modal-head { height: 48px; padding: 0 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .modal-head > div { display: flex; gap: 8px; align-items: center; color: var(--cyan); letter-spacing: 1px; font-size: 12px; }
 .modal-head button { border: 0; background: none; color: #607990; cursor: pointer; }
