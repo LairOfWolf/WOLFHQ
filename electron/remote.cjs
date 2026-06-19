@@ -5,6 +5,7 @@ const http = require("node:http");
 const localPath = require("node:path");
 const path = require("node:path").posix;
 const { detectAntiCheats } = require("./anticheat.cjs");
+const { patchNekoAntiCheatConfig } = require("./neko-ac.cjs");
 
 const TEXT_EXTENSIONS = new Set([
   ".lua", ".cfg", ".json", ".js", ".jsx", ".ts", ".tsx", ".html", ".css",
@@ -1003,8 +1004,25 @@ class RemoteServer {
     };
   }
 
+  getNekoAntiCheatPaths() {
+    if (!this.project?.config?.path) throw new Error("No remote server.cfg was detected.");
+    const profileRoot = path.dirname(this.project.config.path);
+    const resourcesRoot = this.project.resourcesRoots?.find((candidate) => path.dirname(candidate) === profileRoot)
+      || path.join(profileRoot, "resources");
+    const resourceRoot = path.join(resourcesRoot, "[wolfhq]", "neko-anticheat");
+    return {
+      configPath: this.project.config.path,
+      resourceRoot,
+      tokenPath: path.join(resourceRoot, ".neko-token")
+    };
+  }
+
   async readControlToken() {
     return (await this.readFileRaw(this.getControlPaths().tokenPath)).toString("utf8").trim();
+  }
+
+  async readNekoAntiCheatToken() {
+    return (await this.readFileRaw(this.getNekoAntiCheatPaths().tokenPath)).toString("utf8").trim();
   }
 
   async installControlBridge(manifest, serverScript) {
@@ -1025,11 +1043,41 @@ class RemoteServer {
     return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
   }
 
+  async installNekoAntiCheat(files) {
+    const paths = this.getNekoAntiCheatPaths();
+    await this.mkdirRecursive(paths.resourceRoot);
+    try {
+      await this.readNekoAntiCheatToken();
+    } catch {
+      await this.writeFile(paths.tokenPath, `${crypto.randomBytes(32).toString("hex")}\n`);
+    }
+    await this.writeFile(path.join(paths.resourceRoot, "fxmanifest.lua"), files.manifest);
+    await this.writeFile(path.join(paths.resourceRoot, "config.lua"), files.config);
+    await this.writeFile(path.join(paths.resourceRoot, "client.lua"), files.client);
+    await this.writeFile(path.join(paths.resourceRoot, "server.lua"), files.server);
+    await this.writeFile(path.join(paths.resourceRoot, "README.md"), files.readme);
+    await this.writeFile(path.join(paths.resourceRoot, "incidents.json"), "[]\n", { exclusive: true }).catch(() => {});
+    await this.writeFile(path.join(paths.resourceRoot, "bans.json"), "[]\n", { exclusive: true }).catch(() => {});
+    const serverCfg = (await this.readFileRaw(paths.configPath)).toString("utf8");
+    const patchedConfig = patchNekoAntiCheatConfig(serverCfg);
+    if (patchedConfig.changed) await this.writeFile(paths.configPath, patchedConfig.content);
+    return { ok: true, resourcePath: paths.resourceRoot, requiresServerRestart: true, running: false };
+  }
+
   async callControl(route, payload, method = "POST") {
     const token = await this.readControlToken();
     return this.remoteHttpJson(`/wolfhq-control/${route}`, {
       method,
       headers: { "x-wolfhq-token": token },
+      body: method === "GET" ? undefined : payload
+    });
+  }
+
+  async callNekoAntiCheat(route, payload, method = "POST") {
+    const token = await this.readNekoAntiCheatToken();
+    return this.remoteHttpJson(`/neko-anticheat/${route}`, {
+      method,
+      headers: { "x-neko-token": token },
       body: method === "GET" ? undefined : payload
     });
   }

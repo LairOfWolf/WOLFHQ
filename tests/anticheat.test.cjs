@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { detectAntiCheats } = require("../electron/anticheat.cjs");
+const { nekoAntiCheatFiles, patchNekoAntiCheatConfig } = require("../electron/neko-ac.cjs");
 
 test("detects recognized and custom anti-cheat resources with startup state", () => {
   const detected = detectAntiCheats([
@@ -28,4 +29,24 @@ test("detects recognized and custom anti-cheat resources with startup state", ()
   assert.equal(detected[0].status, "enabled");
   assert.equal(detected[1].provider, "Custom / Unrecognized");
   assert.equal(detected[1].status, "enabled");
+});
+
+test("generates the installable Neko Anti-Cheat resource files", () => {
+  const files = nekoAntiCheatFiles("Strict");
+
+  assert.match(files.manifest, /fx_version 'cerulean'/);
+  assert.match(files.config, /NekoAC\.profile = 'Strict'/);
+  assert.match(files.client, /nekoac:heartbeat/);
+  assert.match(files.server, /SetHttpHandler/);
+  assert.match(files.server, /req\.path:match\('\/status\$'\)/);
+  assert.match(files.readme, /WOLFHQ/);
+});
+
+test("patches server.cfg to ensure Neko Anti-Cheat once", () => {
+  const cfg = "ensure mapmanager\nensure chat\n";
+  const patched = patchNekoAntiCheatConfig(cfg).content;
+  const repatched = patchNekoAntiCheatConfig(patched).content;
+
+  assert.match(patched, /ensure neko-anticheat/);
+  assert.equal((repatched.match(/ensure neko-anticheat/g) || []).length, 1);
 });

@@ -30,6 +30,9 @@ const api = window.neonCore || {
   getServerLogs: async () => ({ path: "", lines: [] }),
   installControlBridge: async () => null,
   getControlStatus: async () => ({ installed: false, running: false }),
+  installNekoAntiCheat: async () => null,
+  getNekoAntiCheatStatus: async () => ({ installed: false, running: false, incidents: [], players: [] }),
+  setNekoAntiCheatProfile: async () => null,
   sendAnnouncement: async () => null,
   restartServer: async () => null,
   getOpsDashboard: async () => ({ metrics: [], notes: {}, playerHistory: [], audit: [], accounts: [], current: null, settings: {} }),
@@ -295,6 +298,8 @@ export default function App() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [antiCheatDisplay, setAntiCheatDisplay] = useState("Overview");
   const [antiCheatProfile, setAntiCheatProfile] = useState("Balanced");
+  const [nekoStatus, setNekoStatus] = useState({ installed: false, running: false, incidents: [], players: [], incidentCount: 0, banCount: 0, profile: "Balanced", modules: {} });
+  const [nekoInstalling, setNekoInstalling] = useState(false);
   const [playerDetails, setPlayerDetails] = useState([]);
   const [playerModal, setPlayerModal] = useState(null);
   const [consoleCommand, setConsoleCommand] = useState("");
@@ -480,6 +485,21 @@ export default function App() {
     const timer = window.setInterval(() => loadPlayers().catch(() => {}), 4000);
     return () => window.clearInterval(timer);
   }, [project, activeView, endpoint, status.players]);
+
+  const loadNekoStatus = useCallback(async () => {
+    if (!project) return null;
+    const result = await api.getNekoAntiCheatStatus(endpoint);
+    setNekoStatus(result || { installed: false, running: false, incidents: [], players: [] });
+    if (result?.profile) setAntiCheatProfile(result.profile);
+    return result;
+  }, [endpoint, project]);
+
+  useEffect(() => {
+    if (!project || activeView !== "antiCheat") return;
+    loadNekoStatus().catch(() => {});
+    const timer = window.setInterval(() => loadNekoStatus().catch(() => {}), 5000);
+    return () => window.clearInterval(timer);
+  }, [project, activeView, loadNekoStatus]);
 
   useEffect(() => {
     if (!project || !OPERATIONS_VIEWS.has(activeView)) return;
@@ -741,6 +761,36 @@ export default function App() {
       notify(error.message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function installNekoEngine() {
+    if (!window.confirm(`Install or repair Neko Anti-Cheat using the ${antiCheatProfile} profile?\n\nWOLFHQ will create the neko-anticheat resource, patch server.cfg, and try to start it through the control bridge.`)) return;
+    setNekoInstalling(true);
+    try {
+      const result = await api.installNekoAntiCheat({ profile: antiCheatProfile });
+      if (result?.project) setProject(result.project);
+      await rescan();
+      const latest = await loadNekoStatus().catch(() => result?.status || null);
+      setAntiCheatDisplay("Neko Anti-Cheat");
+      if (latest?.running || result?.running) notify("Neko Anti-Cheat is installed and online");
+      else notify("Neko Anti-Cheat installed. Restart FXServer or run `ensure neko-anticheat` to activate it.");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setNekoInstalling(false);
+    }
+  }
+
+  async function syncNekoProfile(profile) {
+    setAntiCheatProfile(profile);
+    if (!nekoStatus.running) return;
+    try {
+      const result = await api.setNekoAntiCheatProfile(endpoint, profile);
+      setNekoStatus(result);
+      notify(`Neko Anti-Cheat profile set to ${profile}`);
+    } catch (error) {
+      notify(error.message);
     }
   }
 
@@ -1282,6 +1332,11 @@ export default function App() {
     `${antiCheat.provider} // ${antiCheat.resourceName}` === antiCheatDisplay
   ), [detectedAntiCheats, antiCheatDisplay]);
   const nekoSelected = antiCheatDisplay === "Neko Anti-Cheat";
+  const nekoDetected = detectedAntiCheats.find((antiCheat) => antiCheat.provider === "Neko Anti-Cheat");
+  const nekoEngineSelected = nekoSelected || selectedAntiCheat?.provider === "Neko Anti-Cheat";
+  const nekoIncidents = nekoStatus.incidents || [];
+  const nekoPlayers = nekoStatus.players || [];
+  const nekoModulesOnline = Boolean(nekoStatus.running);
   const recentPlayerBans = useMemo(() => {
     const seen = new Set();
     return playerDetails
@@ -1719,11 +1774,11 @@ export default function App() {
                     <div className="anti-cheat-mark"><ShieldAlert size={29} /></div>
                     <span>
                       <strong>NEKO ANTI-CHEAT COMMAND MATRIX</strong>
-                      <small>Server protection discovery, provider visibility, player observation, and the future Neko defence engine.</small>
+                      <small>Installable WOLFHQ runtime protection, provider visibility, live player observation, and incident scoring.</small>
                     </span>
-                    <div className={`anti-cheat-readiness ${detectedAntiCheats.some((item) => item.status === "enabled") ? "protected" : ""}`}>
+                    <div className={`anti-cheat-readiness ${nekoStatus.running || detectedAntiCheats.some((item) => item.status === "enabled") ? "protected" : ""}`}>
                       <Circle size={8} fill="currentColor" />
-                      <span>{detectedAntiCheats.some((item) => item.status === "enabled") ? "PROTECTION DETECTED" : "NO ACTIVE ENGINE DETECTED"}</span>
+                      <span>{nekoStatus.running ? "NEKO ENGINE ONLINE" : detectedAntiCheats.some((item) => item.status === "enabled") ? "PROTECTION DETECTED" : "NO ACTIVE ENGINE DETECTED"}</span>
                     </div>
                   </div>
 
@@ -1731,15 +1786,16 @@ export default function App() {
                     <CatalogDropdown label="Displayed protection system" value={antiCheatDisplay} options={antiCheatChoices} onChange={setAntiCheatDisplay} />
                     <div className="anti-cheat-toolbar-stat"><span>DETECTED</span><strong>{detectedAntiCheats.length}</strong></div>
                     <div className="anti-cheat-toolbar-stat"><span>ENABLED</span><strong>{detectedAntiCheats.filter((item) => item.status === "enabled").length}</strong></div>
+                    <button className={nekoInstalling ? "spinning" : ""} onClick={installNekoEngine} disabled={nekoInstalling}><ShieldAlert size={14} /> {nekoStatus.installed ? "REPAIR NEKO AC" : "INSTALL NEKO AC"}</button>
                     <button className={busy ? "spinning" : ""} onClick={rescan}><RefreshCw size={14} /> RESCAN SERVER</button>
                   </div>
 
                   <div className="anti-cheat-body">
                     <div className="anti-cheat-metrics">
-                      <div><ShieldCheck size={20} /><span>ACTIVE PROVIDER<strong>{selectedAntiCheat?.provider || (nekoSelected ? "Neko Anti-Cheat" : detectedAntiCheats.find((item) => item.status === "enabled")?.provider || "None")}</strong></span></div>
-                      <div><Eye size={20} /><span>OBSERVED PLAYERS<strong>{status.playerCount || 0}</strong></span></div>
-                      <div><AlertTriangle size={20} /><span>LIVE INCIDENTS<strong>0</strong></span></div>
-                      <div><Activity size={20} /><span>TELEMETRY LINK<strong>{nekoSelected ? "NOT DEPLOYED" : selectedAntiCheat ? "ADAPTER NEEDED" : "OFFLINE"}</strong></span></div>
+                      <div><ShieldCheck size={20} /><span>ACTIVE PROVIDER<strong>{nekoStatus.running ? "Neko Anti-Cheat" : selectedAntiCheat?.provider || detectedAntiCheats.find((item) => item.status === "enabled")?.provider || "None"}</strong></span></div>
+                      <div><Eye size={20} /><span>OBSERVED PLAYERS<strong>{nekoPlayers.length || status.playerCount || 0}</strong></span></div>
+                      <div><AlertTriangle size={20} /><span>LIVE INCIDENTS<strong>{nekoStatus.incidentCount ?? nekoIncidents.length}</strong></span></div>
+                      <div><Activity size={20} /><span>TELEMETRY LINK<strong>{nekoStatus.running ? "ONLINE" : nekoStatus.installed || nekoDetected ? "INSTALLED / START REQUIRED" : "NOT INSTALLED"}</strong></span></div>
                     </div>
 
                     <div className="anti-cheat-grid">
@@ -1765,16 +1821,23 @@ export default function App() {
 
                       <div className="anti-cheat-panel provider-panel">
                         <div className="anti-panel-title"><Fingerprint size={17} /><span><strong>PROVIDER INSPECTOR</strong><small>The selected system is displayed here; no server files are changed.</small></span></div>
-                        {nekoSelected ? (
+                        {nekoEngineSelected ? (
                           <div className="neko-provider">
                             <div className="neko-core-orbit"><span /><span /><ShieldAlert size={42} /></div>
                             <strong>NEKO ANTI-CHEAT</strong>
-                            <small>WOLF STUDIOS DEFENCE PLATFORM</small>
-                            <p>The command interface is ready. The actual client/server detection resource has intentionally not been built or installed yet.</p>
+                            <small>{nekoStatus.running ? `ONLINE // ${nekoStatus.version || "1.0.0"}` : nekoStatus.installed || nekoDetected ? "INSTALLED // WAITING FOR RESOURCE START" : "READY TO INSTALL"}</small>
+                            <p>Neko Anti-Cheat deploys a FiveM client/server resource with movement, integrity, weapon, event, entity, and identity protection. It reports live incidents back into WOLFHQ.</p>
                             <div className="anti-profile-selector">
-                              {["Monitor", "Balanced", "Strict"].map((profile) => <button className={antiCheatProfile === profile ? "active" : ""} key={profile} onClick={() => setAntiCheatProfile(profile)}>{profile}</button>)}
+                              {["Monitor", "Balanced", "Strict"].map((profile) => <button className={antiCheatProfile === profile ? "active" : ""} key={profile} onClick={() => syncNekoProfile(profile)}>{profile}</button>)}
                             </div>
-                            <button className="neko-deploy" disabled><LockKeyhole size={15} /> ENGINE NOT BUILT // DEPLOYMENT LOCKED</button>
+                            <div className="neko-runtime-grid">
+                              <div><span>PROFILE</span><strong>{nekoStatus.profile || antiCheatProfile}</strong></div>
+                              <div><span>BANS</span><strong>{nekoStatus.banCount || 0}</strong></div>
+                              <div><span>RESOURCE</span><strong>{nekoStatus.resource || "neko-anticheat"}</strong></div>
+                              <div><span>STATUS</span><strong>{nekoStatus.running ? "ONLINE" : nekoStatus.installed ? "INSTALLED" : "NOT INSTALLED"}</strong></div>
+                            </div>
+                            <button className="neko-deploy" onClick={installNekoEngine} disabled={nekoInstalling}>{nekoInstalling ? <RefreshCw size={15} /> : <Download size={15} />} {nekoStatus.installed ? "REPAIR / REINSTALL ENGINE" : "INSTALL NEKO ANTI-CHEAT"}</button>
+                            {nekoStatus.error && <p className="neko-status-warning">{nekoStatus.error}</p>}
                           </div>
                         ) : selectedAntiCheat ? (
                           <div className="existing-provider">
@@ -1798,17 +1861,26 @@ export default function App() {
                       </div>
 
                       <div className="anti-cheat-panel modules-panel">
-                        <div className="anti-panel-title"><Activity size={17} /><span><strong>DEFENCE MODULES</strong><small>Planned Neko engine coverage; display only until the resource is built</small></span></div>
+                        <div className="anti-panel-title"><Activity size={17} /><span><strong>DEFENCE MODULES</strong><small>{nekoModulesOnline ? "Runtime modules active inside neko-anticheat" : "Install Neko Anti-Cheat to activate these modules"}</small></span></div>
                         <div className="anti-module-grid">
-                          {ANTI_CHEAT_MODULES.map(({ name, detail, icon: Icon }) => <div key={name}><Icon size={17} /><span><strong>{name}</strong><small>{detail}</small></span><i>PLANNED</i></div>)}
+                          {ANTI_CHEAT_MODULES.map(({ name, detail, icon: Icon }) => <div key={name} className={nekoModulesOnline ? "active" : ""}><Icon size={17} /><span><strong>{name}</strong><small>{detail}</small></span><i>{nekoModulesOnline ? "ACTIVE" : "READY"}</i></div>)}
                         </div>
                       </div>
 
                       <div className="anti-cheat-panel activity-panel">
-                        <div className="anti-panel-title"><Eye size={17} /><span><strong>PLAYER OBSERVATION</strong><small>Connected players now; behavioural telemetry requires an engine adapter</small></span></div>
+                        <div className="anti-panel-title"><Eye size={17} /><span><strong>PLAYER OBSERVATION</strong><small>{nekoStatus.running ? "Live Neko telemetry, scores, and recent flags" : "Connected players now; install Neko Anti-Cheat for behavioural telemetry"}</small></span></div>
                         <div className="anti-player-list">
-                          {(status.players || []).slice(0, 8).map((player) => <div key={`${player.id}-${player.name}`}><span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms</small><em>NO EVENT STREAM</em></div>)}
-                          {!status.players?.length && <div className="anti-empty-feed"><Eye size={28} /><strong>NO PLAYERS TO OBSERVE</strong><p>Connected players will appear here. Detailed actions will require the future Neko telemetry resource or a provider adapter.</p></div>}
+                          {(nekoPlayers.length ? nekoPlayers : status.players || []).slice(0, 8).map((player) => <div key={`${player.id}-${player.name}`}><span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms // score {player.score ?? 0}</small><em>{player.flags?.length ? `${player.flags.length} FLAGS` : nekoStatus.running ? "CLEAR" : "NO EVENT STREAM"}</em></div>)}
+                          {!status.players?.length && !nekoPlayers.length && <div className="anti-empty-feed"><Eye size={28} /><strong>NO PLAYERS TO OBSERVE</strong><p>Connected players will appear here. Neko telemetry starts after the resource is installed and running.</p></div>}
+                        </div>
+                        <div className="neko-incident-feed">
+                          {nekoIncidents.slice(-5).reverse().map((incident) => (
+                            <div key={incident.id || `${incident.createdAt}-${incident.message}`}>
+                              <AlertTriangle size={14} />
+                              <span><strong>{incident.moduleLabel || incident.module}</strong><small>{incident.name} // severity {incident.severity}</small></span>
+                              <em>{incident.message}</em>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
