@@ -1,5 +1,5 @@
 const NEKO_ANTI_CHEAT_RESOURCE = "neko-anticheat";
-const NEKO_ANTI_CHEAT_VERSION = "1.0.0";
+const NEKO_ANTI_CHEAT_VERSION = "1.0.1";
 
 function nekoAntiCheatFiles(profile = "Balanced") {
   const safeProfile = ["Monitor", "Balanced", "Strict"].includes(profile) ? profile : "Balanced";
@@ -19,13 +19,14 @@ function nekoAntiCheatFiles(profile = "Balanced") {
   const config = [
     "NekoAC = NekoAC or {}",
     `NekoAC.profile = '${safeProfile}' -- Monitor, Balanced, Strict`,
-    "NekoAC.version = '1.0.0'",
+    `NekoAC.version = '${NEKO_ANTI_CHEAT_VERSION}'`,
     "NekoAC.heartbeatSeconds = 15",
+    "NekoAC.joinGraceSeconds = 90",
     "NekoAC.maxRunSpeed = 13.5",
     "NekoAC.teleportDistance = 85.0",
     "NekoAC.maxHealth = 205",
     "NekoAC.maxArmour = 100",
-    "NekoAC.entityBurstLimit = 34",
+    "NekoAC.entityBurstLimit = 120",
     "NekoAC.explosionBurstLimit = 5",
     "NekoAC.blacklistedWeapons = {",
     "  'WEAPON_RAILGUN',",
@@ -52,6 +53,7 @@ function nekoAntiCheatFiles(profile = "Balanced") {
   ].join("\n");
   const client = `local lastPosition = nil
 local lastReport = {}
+local clientStartedAt = GetGameTimer()
 
 local function now()
     return GetGameTimer()
@@ -71,6 +73,10 @@ local function report(module, severity, message, data)
     TriggerServerEvent('nekoac:flag', module, severity, message, data or {})
 end
 
+local function inJoinGrace()
+    return GetGameTimer() - clientStartedAt < ((NekoAC.joinGraceSeconds or 90) * 1000)
+end
+
 local function weaponHashList()
     local result = {}
     for _, name in ipairs(NekoAC.blacklistedWeapons or {}) do
@@ -86,6 +92,7 @@ CreateThread(function()
         Wait(1750)
         local ped = PlayerPedId()
         if ped and ped ~= 0 and NetworkIsPlayerActive(PlayerId()) then
+            local grace = inJoinGrace()
             local health = GetEntityHealth(ped)
             local armour = GetPedArmour(ped)
             if health > (NekoAC.maxHealth or 205) then
@@ -94,10 +101,10 @@ CreateThread(function()
             if armour > (NekoAC.maxArmour or 100) then
                 report('PLAYER_INTEGRITY', 72, 'Armour above configured maximum', { armour = armour })
             end
-            if GetPlayerInvincible(PlayerId()) then
+            if not grace and GetPlayerInvincible(PlayerId()) then
                 report('PLAYER_INTEGRITY', 95, 'Player invincibility native returned true', {})
             end
-            if not IsEntityVisible(ped) and not IsPedDeadOrDying(ped, true) then
+            if not grace and not IsEntityVisible(ped) and not IsPedDeadOrDying(ped, true) then
                 report('PLAYER_INTEGRITY', 80, 'Player ped is invisible', {})
             end
 
@@ -109,7 +116,7 @@ CreateThread(function()
             local coords = GetEntityCoords(ped)
             local inVehicle = IsPedInAnyVehicle(ped, false)
             local falling = IsPedFalling(ped) or IsPedRagdoll(ped) or IsPedClimbing(ped) or IsPedDeadOrDying(ped, true)
-            if not inVehicle and not falling then
+            if not grace and not inVehicle and not falling then
                 local speed = GetEntitySpeed(ped)
                 if speed > (NekoAC.maxRunSpeed or 13.5) then
                     report('MOVEMENT_ANALYSIS', 72, 'Suspicious on-foot speed', { speed = speed })
@@ -120,6 +127,8 @@ CreateThread(function()
                         report('MOVEMENT_ANALYSIS', 86, 'Large on-foot position delta', { distance = distance })
                     end
                 end
+            elseif grace then
+                lastPosition = coords
             end
             lastPosition = coords
         end
@@ -137,7 +146,12 @@ CreateThread(function()
                 armour = GetPedArmour(ped),
                 speed = GetEntitySpeed(ped),
                 weapon = GetSelectedPedWeapon(ped),
-                coords = { x = coords.x, y = coords.y, z = coords.z }
+                coords = { x = coords.x, y = coords.y, z = coords.z },
+                heading = GetEntityHeading(ped),
+                visible = IsEntityVisible(ped),
+                invincible = GetPlayerInvincible(PlayerId()),
+                inVehicle = IsPedInAnyVehicle(ped, false),
+                dead = IsPedDeadOrDying(ped, true)
             })
         end
     end
@@ -166,8 +180,8 @@ local moduleNames = {
 
 local profiles = {
     Monitor = { dropSeverity = 999, maxScore = 999, decay = 10 },
-    Balanced = { dropSeverity = 96, maxScore = 170, decay = 12 },
-    Strict = { dropSeverity = 84, maxScore = 115, decay = 8 }
+    Balanced = { dropSeverity = 101, maxScore = 320, decay = 16 },
+    Strict = { dropSeverity = 98, maxScore = 240, decay = 12 }
 }
 
 local function activeProfile()
@@ -178,6 +192,26 @@ end
 
 local function saveJson(fileName, value)
     SaveResourceFile(RESOURCE, fileName, json.encode(value), -1)
+end
+
+local function cleanupEarlyFalsePositiveBans()
+    local cleaned = {}
+    local changed = false
+    for _, ban in ipairs(bans) do
+        local reason = tostring(ban.reason or '')
+        if reason:find('Blocked entity creation burst', 1, true)
+            or reason:find('Large on-foot position delta', 1, true)
+            or reason:find('Player ped is invisible', 1, true) then
+            changed = true
+        else
+            cleaned[#cleaned + 1] = ban
+        end
+    end
+    if changed then
+        bans = cleaned
+        saveJson(BANS_FILE, bans)
+        print('[NekoAC] Removed early false-positive movement/entity bans during 1.0.1 safety migration.')
+    end
 end
 
 local function sendJson(res, status, payload)
@@ -209,6 +243,7 @@ local function ensurePlayer(source)
             ping = GetPlayerPing(source),
             score = 0,
             flags = {},
+            firstSeenUnix = os.time(),
             firstSeen = os.date('!%Y-%m-%dT%H:%M:%SZ'),
             lastSeen = os.date('!%Y-%m-%dT%H:%M:%SZ')
         }
@@ -217,6 +252,62 @@ local function ensurePlayer(source)
     players[key].ping = GetPlayerPing(source)
     players[key].lastSeen = os.date('!%Y-%m-%dT%H:%M:%SZ')
     return players[key]
+end
+
+local function isFreshPlayer(source)
+    local player = ensurePlayer(source)
+    return os.time() - (player.firstSeenUnix or os.time()) < (NekoAC.joinGraceSeconds or 90)
+end
+
+local function getFrameworkInventory(source)
+    local inventory = {}
+    if GetResourceState('qb-core') == 'started' then
+        local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+        if ok and core and core.Functions then
+            local okPlayer, qbPlayer = pcall(function() return core.Functions.GetPlayer(tonumber(source)) end)
+            local items = okPlayer and qbPlayer and qbPlayer.PlayerData and qbPlayer.PlayerData.items or {}
+            for _, item in pairs(items or {}) do
+                if item and item.name then
+                    inventory[#inventory + 1] = {
+                        name = item.name,
+                        label = item.label or item.name,
+                        count = item.amount or item.count or 1,
+                        slot = item.slot
+                    }
+                end
+            end
+        end
+    end
+    if #inventory == 0 and GetResourceState('qbx_core') == 'started' and GetResourceState('ox_inventory') == 'started' then
+        local ok, items = pcall(function() return exports.ox_inventory:GetInventoryItems(source) end)
+        for _, item in pairs(ok and items or {}) do
+            if item and item.name then
+                inventory[#inventory + 1] = {
+                    name = item.name,
+                    label = item.label or item.name,
+                    count = item.count or item.amount or 1,
+                    slot = item.slot
+                }
+            end
+        end
+    end
+    if #inventory == 0 and GetResourceState('es_extended') == 'started' then
+        local ok, esx = pcall(function() return exports['es_extended']:getSharedObject() end)
+        if ok and esx and esx.GetPlayerFromId then
+            local xPlayer = esx.GetPlayerFromId(tonumber(source))
+            local items = xPlayer and xPlayer.getInventory and xPlayer.getInventory() or {}
+            for _, item in pairs(items or {}) do
+                if item and item.name and (item.count or 0) > 0 then
+                    inventory[#inventory + 1] = {
+                        name = item.name,
+                        label = item.label or item.name,
+                        count = item.count or 1
+                    }
+                end
+            end
+        end
+    end
+    return inventory
 end
 
 local function hasBan(source)
@@ -260,11 +351,12 @@ local function addIncident(source, module, severity, message, data)
     saveJson(INCIDENTS_FILE, incidents)
 
     if player then
-        player.score = math.max(0, (player.score or 0) + severity)
+        local observeOnly = incident.data and incident.data.observeOnly
+        player.score = observeOnly and (player.score or 0) or math.max(0, (player.score or 0) + severity)
         player.flags[#player.flags + 1] = incident
         while #player.flags > 12 do table.remove(player.flags, 1) end
         local policy = profiles[activeProfile()] or profiles.Balanced
-        if severity >= policy.dropSeverity or player.score >= policy.maxScore then
+        if not observeOnly and (severity >= policy.dropSeverity or player.score >= policy.maxScore) then
             local reason = ('Neko Anti-Cheat: %s'):format(message)
             bans[#bans + 1] = {
                 name = player.name,
@@ -340,9 +432,13 @@ AddEventHandler('entityCreating', function(entity)
         entityWindows[owner] = { start = stamp, count = 0 }
     end
     entityWindows[owner].count = entityWindows[owner].count + 1
-    if entityWindows[owner].count > (NekoAC.entityBurstLimit or 34) then
+    if entityWindows[owner].count > (NekoAC.entityBurstLimit or 120) then
+        if isFreshPlayer(owner) then
+            addIncident(owner, 'ENTITY_DEFENCE', 25, 'Observed join-time entity creation burst', { count = entityWindows[owner].count, observeOnly = true })
+            return
+        end
         CancelEvent()
-        addIncident(owner, 'ENTITY_DEFENCE', 86, 'Blocked entity creation burst', { count = entityWindows[owner].count })
+        addIncident(owner, 'ENTITY_DEFENCE', 65, 'Blocked entity creation burst', { count = entityWindows[owner].count, observeOnly = true })
     end
 end)
 
@@ -361,7 +457,10 @@ end, true)
 local function statusPayload()
     local livePlayers = {}
     for _, source in ipairs(GetPlayers()) do
-        livePlayers[#livePlayers + 1] = ensurePlayer(source)
+        local player = ensurePlayer(source)
+        player.inventory = getFrameworkInventory(source)
+        player.inventoryCount = #player.inventory
+        livePlayers[#livePlayers + 1] = player
     end
     local recent = {}
     for index = math.max(1, #incidents - 49), #incidents do
@@ -410,6 +509,7 @@ SetHttpHandler(function(req, res)
 end)
 
 print(('[NekoAC] Runtime protection online. Profile: %s'):format(activeProfile()))
+cleanupEarlyFalsePositiveBans()
 `;
   const readme = [
     "# Neko Anti-Cheat",

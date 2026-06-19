@@ -300,6 +300,7 @@ export default function App() {
   const [antiCheatProfile, setAntiCheatProfile] = useState("Balanced");
   const [nekoStatus, setNekoStatus] = useState({ installed: false, running: false, incidents: [], players: [], incidentCount: 0, banCount: 0, profile: "Balanced", modules: {} });
   const [nekoInstalling, setNekoInstalling] = useState(false);
+  const [selectedNekoPlayerId, setSelectedNekoPlayerId] = useState(null);
   const [playerDetails, setPlayerDetails] = useState([]);
   const [playerModal, setPlayerModal] = useState(null);
   const [consoleCommand, setConsoleCommand] = useState("");
@@ -1336,6 +1337,8 @@ export default function App() {
   const nekoEngineSelected = nekoSelected || selectedAntiCheat?.provider === "Neko Anti-Cheat";
   const nekoIncidents = nekoStatus.incidents || [];
   const nekoPlayers = nekoStatus.players || [];
+  const observedNekoPlayers = nekoPlayers.length ? nekoPlayers : status.players || [];
+  const selectedNekoPlayer = observedNekoPlayers.find((player) => String(player.id) === String(selectedNekoPlayerId)) || observedNekoPlayers[0] || null;
   const nekoModulesOnline = Boolean(nekoStatus.running);
   const recentPlayerBans = useMemo(() => {
     const seen = new Set();
@@ -1870,9 +1873,42 @@ export default function App() {
                       <div className="anti-cheat-panel activity-panel">
                         <div className="anti-panel-title"><Eye size={17} /><span><strong>PLAYER OBSERVATION</strong><small>{nekoStatus.running ? "Live Neko telemetry, scores, and recent flags" : "Connected players now; install Neko Anti-Cheat for behavioural telemetry"}</small></span></div>
                         <div className="anti-player-list">
-                          {(nekoPlayers.length ? nekoPlayers : status.players || []).slice(0, 8).map((player) => <div key={`${player.id}-${player.name}`}><span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms // score {player.score ?? 0}</small><em>{player.flags?.length ? `${player.flags.length} FLAGS` : nekoStatus.running ? "CLEAR" : "NO EVENT STREAM"}</em></div>)}
-                          {!status.players?.length && !nekoPlayers.length && <div className="anti-empty-feed"><Eye size={28} /><strong>NO PLAYERS TO OBSERVE</strong><p>Connected players will appear here. Neko telemetry starts after the resource is installed and running.</p></div>}
+                          {observedNekoPlayers.slice(0, 8).map((player) => (
+                            <button className={String(selectedNekoPlayer?.id) === String(player.id) ? "active" : ""} key={`${player.id}-${player.name}`} onClick={() => setSelectedNekoPlayerId(player.id)}>
+                              <span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms // score {player.score ?? 0}</small><em>{player.flags?.length ? `${player.flags.length} FLAGS` : nekoStatus.running ? "CLEAR" : "NO EVENT STREAM"}</em>
+                            </button>
+                          ))}
+                          {!observedNekoPlayers.length && <div className="anti-empty-feed"><Eye size={28} /><strong>NO PLAYERS TO OBSERVE</strong><p>Connected players will appear here. Neko telemetry starts after the resource is installed and running.</p></div>}
                         </div>
+                        {selectedNekoPlayer && (
+                          <div className="neko-player-inspector">
+                            <div className="neko-inspector-head">
+                              <span><strong>{selectedNekoPlayer.name}</strong><small>Server ID #{selectedNekoPlayer.id} // {selectedNekoPlayer.ping ?? "--"} ms ping</small></span>
+                              <i>{selectedNekoPlayer.flags?.length ? `${selectedNekoPlayer.flags.length} RECENT FLAGS` : "CLEAR"}</i>
+                            </div>
+                            <div className="neko-live-grid">
+                              <div><span>HEALTH</span><strong>{selectedNekoPlayer.telemetry?.health ?? "--"}</strong></div>
+                              <div><span>ARMOUR</span><strong>{selectedNekoPlayer.telemetry?.armour ?? "--"}</strong></div>
+                              <div><span>SPEED</span><strong>{selectedNekoPlayer.telemetry?.speed?.toFixed ? selectedNekoPlayer.telemetry.speed.toFixed(2) : selectedNekoPlayer.telemetry?.speed ?? "--"}</strong></div>
+                              <div><span>VEHICLE</span><strong>{selectedNekoPlayer.telemetry?.inVehicle ? "YES" : "NO"}</strong></div>
+                              <div><span>VISIBLE</span><strong>{selectedNekoPlayer.telemetry?.visible === false ? "NO" : selectedNekoPlayer.telemetry ? "YES" : "--"}</strong></div>
+                              <div><span>DEAD</span><strong>{selectedNekoPlayer.telemetry?.dead ? "YES" : "NO"}</strong></div>
+                              <div><span>WEAPON HASH</span><strong>{selectedNekoPlayer.telemetry?.weapon ?? "--"}</strong></div>
+                              <div><span>LAST BEAT</span><strong>{selectedNekoPlayer.lastHeartbeat ? new Date(selectedNekoPlayer.lastHeartbeat).toLocaleTimeString() : "--"}</strong></div>
+                            </div>
+                            <div className="neko-location-row">
+                              <Fingerprint size={13} />
+                              <span>{selectedNekoPlayer.telemetry?.coords ? `X ${selectedNekoPlayer.telemetry.coords.x?.toFixed?.(2) ?? selectedNekoPlayer.telemetry.coords.x} // Y ${selectedNekoPlayer.telemetry.coords.y?.toFixed?.(2) ?? selectedNekoPlayer.telemetry.coords.y} // Z ${selectedNekoPlayer.telemetry.coords.z?.toFixed?.(2) ?? selectedNekoPlayer.telemetry.coords.z}` : "Waiting for live position heartbeat"}</span>
+                            </div>
+                            <div className="neko-inventory-panel">
+                              <span><Box size={13} /> INVENTORY SNAPSHOT <em>{selectedNekoPlayer.inventoryCount || selectedNekoPlayer.inventory?.length || 0} ITEMS</em></span>
+                              <div>
+                                {(selectedNekoPlayer.inventory || []).slice(0, 12).map((item, index) => <b key={`${item.name}-${item.slot || index}`}>{item.label || item.name}<small>x{item.count || 1}</small></b>)}
+                                {!selectedNekoPlayer.inventory?.length && <p>No framework inventory data exposed yet. QBCore, Qbox/Ox Inventory, and ESX are checked automatically.</p>}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <div className="neko-incident-feed">
                           {nekoIncidents.slice(-5).reverse().map((incident) => (
                             <div key={incident.id || `${incident.createdAt}-${incident.message}`}>

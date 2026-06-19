@@ -891,11 +891,31 @@ button { color: inherit; }
 .anti-module-grid > div.active > svg { color: var(--green); filter: drop-shadow(0 0 7px rgba(88, 255, 209, .28)); }
 .anti-module-grid > div.active i { color: var(--green); }
 .anti-player-list { max-height: 190px; overflow: auto; }
-.anti-player-list > div:not(.anti-empty-feed) { min-height: 38px; padding: 0 8px; border-bottom: 1px solid rgba(105, 136, 168, .08); display: grid; grid-template-columns: 70px minmax(120px, 1fr) 70px 120px; align-items: center; color: #756878; font: 8px "JetBrains Mono"; }
-.anti-player-list > div > span { display: flex; align-items: center; gap: 6px; }
-.anti-player-list > div > span i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
-.anti-player-list > div > strong { color: #b5a5ad; font-size: 10px; }
-.anti-player-list > div > em { color: #765366; font: 7px "JetBrains Mono"; font-style: normal; text-align: right; }
+.anti-player-list > button { width: 100%; min-height: 38px; padding: 0 8px; border: 0; border-bottom: 1px solid rgba(105, 136, 168, .08); background: transparent; display: grid; grid-template-columns: 70px minmax(120px, 1fr) 70px 120px; align-items: center; color: #756878; font: 8px "JetBrains Mono"; text-align: left; cursor: pointer; }
+.anti-player-list > button:hover, .anti-player-list > button.active { background: rgba(255, 75, 136, .05); box-shadow: inset 2px 0 #ff5990; }
+.anti-player-list > button > span { display: flex; align-items: center; gap: 6px; }
+.anti-player-list > button > span i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+.anti-player-list > button > strong { color: #b5a5ad; font-size: 10px; }
+.anti-player-list > button > em { color: #765366; font: 7px "JetBrains Mono"; font-style: normal; text-align: right; }
+.neko-player-inspector { margin-top: 10px; padding: 10px; border: 1px solid rgba(255, 76, 139, .14); background: radial-gradient(circle at 100% 0, rgba(255, 76, 139, .08), transparent 28%), rgba(5, 9, 19, .72); }
+.neko-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(255, 76, 139, .1); padding-bottom: 8px; }
+.neko-inspector-head span { min-width: 0; display: flex; flex-direction: column; }
+.neko-inspector-head strong { color: #ffe5ee; font-size: 13px; }
+.neko-inspector-head small { margin-top: 3px; color: #766a78; font: 8px "JetBrains Mono"; }
+.neko-inspector-head i { color: #ffc14a; font: 7px "JetBrains Mono"; font-style: normal; white-space: nowrap; }
+.neko-live-grid { margin-top: 8px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.neko-live-grid div { min-width: 0; padding: 7px; border: 1px solid rgba(88, 255, 209, .1); background: rgba(88, 255, 209, .025); display: flex; flex-direction: column; }
+.neko-live-grid span { color: #577d78; font: 7px "JetBrains Mono"; }
+.neko-live-grid strong { margin-top: 3px; color: #c9fff2; font: 10px "Rajdhani"; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neko-location-row { margin-top: 7px; min-height: 30px; padding: 0 8px; border: 1px solid rgba(88, 255, 209, .1); color: #8fb5b2; display: flex; align-items: center; gap: 7px; font: 8px "JetBrains Mono"; }
+.neko-location-row svg { color: var(--green); }
+.neko-inventory-panel { margin-top: 8px; }
+.neko-inventory-panel > span { display: flex; align-items: center; gap: 7px; color: #ff9fbd; font: 8px "JetBrains Mono"; }
+.neko-inventory-panel > span em { margin-left: auto; color: #755f72; font-style: normal; }
+.neko-inventory-panel > div { margin-top: 6px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.neko-inventory-panel b { min-width: 0; padding: 6px 7px; border: 1px solid rgba(105, 136, 168, .1); color: #b8cde0; background: rgba(8, 12, 25, .65); font: 8px "JetBrains Mono"; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neko-inventory-panel b small { float: right; color: var(--green); font: 8px "JetBrains Mono"; }
+.neko-inventory-panel p { grid-column: 1 / -1; margin: 0; color: #6f6170; font: 8px/1.45 "JetBrains Mono"; }
 .neko-incident-feed { margin-top: 10px; display: grid; gap: 6px; }
 .neko-incident-feed > div { min-height: 42px; padding: 8px; border: 1px solid rgba(255, 193, 74, .16); background: rgba(255, 193, 74, .035); display: grid; grid-template-columns: 22px minmax(120px, .8fr) minmax(160px, 1.2fr); gap: 8px; align-items: center; }
 .neko-incident-feed svg { color: #ffc14a; }
