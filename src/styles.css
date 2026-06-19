@@ -906,12 +906,12 @@ button { color: inherit; }
 .neko-guard-actions button:disabled { opacity: .45; cursor: not-allowed; }
 .neko-guard-actions span { grid-column: 1 / -1; color: #756b78; font: 8px/1.45 "JetBrains Mono"; }
 .anti-player-list { max-height: 190px; overflow: auto; }
-.anti-player-list > button { width: 100%; min-height: 38px; padding: 0 8px; border: 0; border-bottom: 1px solid rgba(105, 136, 168, .08); background: transparent; display: grid; grid-template-columns: 70px minmax(120px, 1fr) 70px 120px; align-items: center; color: #756878; font: 8px "JetBrains Mono"; text-align: left; cursor: pointer; }
+.anti-player-list > button { width: 100%; min-height: 48px; padding: 0 11px; border: 0; border-bottom: 1px solid rgba(105, 136, 168, .08); background: transparent; display: grid; grid-template-columns: 76px minmax(140px, 1fr) 115px 155px; align-items: center; color: #95a8ba; font: 10px "JetBrains Mono"; text-align: left; cursor: pointer; }
 .anti-player-list > button:hover, .anti-player-list > button.active { background: rgba(255, 75, 136, .05); box-shadow: inset 2px 0 #ff5990; }
 .anti-player-list > button > span { display: flex; align-items: center; gap: 6px; }
 .anti-player-list > button > span i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
-.anti-player-list > button > strong { color: #b5a5ad; font-size: 10px; }
-.anti-player-list > button > em { color: #765366; font: 7px "JetBrains Mono"; font-style: normal; text-align: right; }
+.anti-player-list > button > strong { color: #e5f7ff; font-size: 12px; }
+.anti-player-list > button > em { color: #78e5cc; font: 9px "JetBrains Mono"; font-style: normal; text-align: right; }
 .neko-player-inspector { margin-top: 10px; padding: 10px; border: 1px solid rgba(255, 76, 139, .14); background: radial-gradient(circle at 100% 0, rgba(255, 76, 139, .08), transparent 28%), rgba(5, 9, 19, .72); }
 .neko-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(255, 76, 139, .1); padding-bottom: 8px; }
 .neko-inspector-head span { min-width: 0; display: flex; flex-direction: column; }

@@ -770,6 +770,7 @@ export default function App() {
   }
 
   async function installNekoEngine() {
+    setAntiCheatDisplay("Neko Anti-Cheat");
     setModal("nekoInstall");
   }
 
@@ -807,7 +808,7 @@ export default function App() {
     const watcher = Number(spectatorServerId) || undefined;
     try {
       await api.spectateNekoPlayer(endpoint, { watcher, target: Number(targetId), action });
-      notify(action === "stop" ? "Spectate stopped in-game" : `Spectating server ID ${targetId} in-game`);
+      notify(action === "stop" ? "Spectate stopped in-game" : `Spectate request sent for server ID ${targetId}`);
     } catch (error) {
       notify(error.message);
     }
@@ -1910,8 +1911,8 @@ export default function App() {
                         <div className="anti-panel-title"><Eye size={17} /><span><strong>PLAYER OBSERVATION</strong><small>{nekoStatus.running ? "Live Neko telemetry, scores, and recent flags" : "Connected players now; install Neko Anti-Cheat for behavioural telemetry"}</small></span></div>
                         <div className="anti-player-list">
                           {observedNekoPlayers.slice(0, 8).map((player) => (
-                            <button className={String(inspectedNekoPlayerId) === String(player.id) ? "active" : ""} key={`${player.id}-${player.name}`} onClick={() => setInspectedNekoPlayerId(player.id)}>
-                              <span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms // score {player.score ?? 0}</small><em>{player.flags?.length ? `${player.flags.length} FLAGS` : nekoStatus.running ? "CLEAR" : "NO EVENT STREAM"}</em>
+                            <button className={String(inspectedNekoPlayerId) === String(player.id) ? "active" : ""} key={`${player.id}-${player.name}`} onClick={() => setInspectedNekoPlayerId(player.id)} title="Open Neko Player Intel and spectate controls">
+                              <span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms // score {player.score ?? 0}</small><em>{player.flags?.length ? `${player.flags.length} FLAGS` : nekoStatus.running ? "OPEN INTEL / SPECTATE" : "NO EVENT STREAM"}</em>
                             </button>
                           ))}
                           {!observedNekoPlayers.length && <div className="anti-empty-feed"><Eye size={28} /><strong>NO PLAYERS TO OBSERVE</strong><p>Connected players will appear here. Neko telemetry starts after the resource is installed and running.</p></div>}
@@ -2497,10 +2498,10 @@ export default function App() {
               <i>{inspectedNekoPlayer.flags?.length ? `${inspectedNekoPlayer.flags.length} RECENT FLAGS` : "CLEAR"}</i>
             </div>
             <div className="neko-spectate-controls">
-              <label>Optional watcher server ID<input value={spectatorServerId} onChange={(event) => setSpectatorServerId(event.target.value.replace(/\D/g, ""))} placeholder="Auto if blank" /></label>
+              <label>Optional watcher server ID<input value={spectatorServerId} onChange={(event) => setSpectatorServerId(event.target.value.replace(/\D/g, ""))} placeholder={nekoStatus.watcher ? `Registered: ${nekoStatus.watcher}` : "Auto if blank"} /></label>
               <button type="button" onClick={() => controlNekoSpectate("start", inspectedNekoPlayer.id)}><Eye size={16} /> START SPECTATE</button>
               <button type="button" className="stop" onClick={() => controlNekoSpectate("stop", inspectedNekoPlayer.id)}><X size={16} /> STOP SPECTATE</button>
-              <span>Leave blank for auto mode. Neko AC will choose a connected watcher client and trigger spectate inside FiveM. If several staff are online, enter your own server ID.</span>
+              <span>Leave blank for auto mode. For best results, join in-game and run /nekoacwatcher once from your staff client, then WOLFHQ can use that client as the spectate camera.</span>
             </div>
             <div className="neko-live-grid modal-grid">
               <div><span>HEALTH</span><strong>{inspectedNekoPlayer.telemetry?.health ?? "--"}</strong></div>

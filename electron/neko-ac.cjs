@@ -1,5 +1,5 @@
 const NEKO_ANTI_CHEAT_RESOURCE = "neko-anticheat";
-const NEKO_ANTI_CHEAT_VERSION = "1.0.3";
+const NEKO_ANTI_CHEAT_VERSION = "1.0.4";
 const NEKO_RESOURCE_GUARD_MARKER = "-- WOLFHQ Neko Anti-Cheat resource guard";
 const NEKO_RESOURCE_GUARD_LINE = "shared_script '@neko-anticheat/resource_guard.lua'";
 
@@ -360,13 +360,13 @@ end
 
 local function autoWatcher(target)
     target = tonumber(target) or -1
-    local fallback = nil
+    local registered = tonumber(runtimeSettings.watcher)
+    if registered and registered ~= target and playerOnline(registered) then return registered end
     for _, playerId in ipairs(GetPlayers()) do
         local numeric = tonumber(playerId)
         if numeric and numeric ~= target then return numeric end
-        fallback = fallback or numeric
     end
-    return fallback
+    return nil
 end
 
 local function hasBan(source)
@@ -523,6 +523,16 @@ RegisterCommand('nekoac', function(source, args)
     end
 end, true)
 
+RegisterCommand('nekoacwatcher', function(source)
+    if source == 0 then
+        print('[NekoAC] Run /nekoacwatcher from your in-game staff client to register it as the WOLFHQ spectate camera.')
+        return
+    end
+    runtimeSettings.watcher = tonumber(source)
+    saveJson(SETTINGS_FILE, runtimeSettings)
+    TriggerClientEvent('chat:addMessage', source, { args = { 'NekoAC', 'This client is now the WOLFHQ spectate watcher.' } })
+end, false)
+
 local function statusPayload()
     local livePlayers = {}
     for _, source in ipairs(GetPlayers()) do
@@ -546,7 +556,8 @@ local function statusPayload()
         incidentCount = #incidents,
         banCount = #bans,
         modules = moduleNames,
-        protectedResources = protectedResources
+        protectedResources = protectedResources,
+        watcher = runtimeSettings.watcher
     }
 end
 
@@ -584,6 +595,7 @@ SetHttpHandler(function(req, res)
                 TriggerClientEvent('nekoac:stopSpectate', watcher)
                 return sendJson(res, 200, { ok = true, action = 'stop', watcher = watcher })
             end
+            if target and watcher == target then return sendJson(res, 400, { ok = false, error = 'Cannot spectate the same player as the watcher. Join with your staff client or run /nekoacwatcher in-game.' }) end
             if not target or not playerOnline(target) then return sendJson(res, 400, { ok = false, error = 'Target server ID is not online.' }) end
             TriggerClientEvent('nekoac:spectate', watcher, target)
             return sendJson(res, 200, { ok = true, action = 'start', watcher = watcher, target = target })
