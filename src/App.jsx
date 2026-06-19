@@ -305,6 +305,8 @@ export default function App() {
   const [inspectedNekoPlayerId, setInspectedNekoPlayerId] = useState(null);
   const [spectatorServerId, setSpectatorServerId] = useState("");
   const [nekoGuardBusy, setNekoGuardBusy] = useState(false);
+  const [nekoGuardAction, setNekoGuardAction] = useState(null);
+  const [nekoUpdateStagedVersion, setNekoUpdateStagedVersion] = useState("");
   const [playerDetails, setPlayerDetails] = useState([]);
   const [playerModal, setPlayerModal] = useState(null);
   const [consoleCommand, setConsoleCommand] = useState("");
@@ -494,10 +496,14 @@ export default function App() {
   const loadNekoStatus = useCallback(async () => {
     if (!project) return null;
     const result = await api.getNekoAntiCheatStatus(endpoint);
-    setNekoStatus(result || { installed: false, running: false, incidents: [], players: [] });
+    const normalized = result || { installed: false, running: false, incidents: [], players: [] };
+    const staged = nekoUpdateStagedVersion && normalized.latestVersion === nekoUpdateStagedVersion && normalized.updateAvailable
+      ? { ...normalized, updateAvailable: false, pendingRestart: true, stagedVersion: nekoUpdateStagedVersion }
+      : normalized;
+    setNekoStatus(staged);
     if (result?.profile) setAntiCheatProfile(result.profile);
-    return result;
-  }, [endpoint, project]);
+    return staged;
+  }, [endpoint, project, nekoUpdateStagedVersion]);
 
   useEffect(() => {
     if (!project || activeView !== "antiCheat") return;
@@ -505,6 +511,13 @@ export default function App() {
     const timer = window.setInterval(() => loadNekoStatus().catch(() => {}), 5000);
     return () => window.clearInterval(timer);
   }, [project, activeView, loadNekoStatus]);
+
+  useEffect(() => {
+    if (!project || activeView !== "antiCheat" || !inspectedNekoPlayerId) return;
+    loadNekoStatus().catch(() => {});
+    const timer = window.setInterval(() => loadNekoStatus().catch(() => {}), 900);
+    return () => window.clearInterval(timer);
+  }, [project, activeView, inspectedNekoPlayerId, loadNekoStatus]);
 
   useEffect(() => {
     if (!project || !OPERATIONS_VIEWS.has(activeView)) return;
@@ -782,8 +795,13 @@ export default function App() {
       if (result?.project) setProject(result.project);
       await rescan();
       const latest = await loadNekoStatus().catch(() => result?.status || null);
+      const stagedVersion = latest?.latestVersion || nekoStatus.latestVersion;
+      if (stagedVersion) {
+        setNekoUpdateStagedVersion(stagedVersion);
+        setNekoStatus((current) => ({ ...current, updateAvailable: false, pendingRestart: true, stagedVersion }));
+      }
       setAntiCheatDisplay("Neko Anti-Cheat");
-      if (latest?.running || result?.running) notify("Neko Anti-Cheat is installed and online");
+      if (latest?.running || result?.running) notify("Neko Anti-Cheat update staged. Restart neko-anticheat or FXServer to load the new runtime.");
       else notify("Neko Anti-Cheat installed. Restart FXServer or run `ensure neko-anticheat` to activate it.");
     } catch (error) {
       notify(error.message);
@@ -815,8 +833,14 @@ export default function App() {
   }
 
   async function updateNekoGuards(action) {
+    setNekoGuardAction(action);
+    setModal("nekoGuard");
+  }
+
+  async function performNekoGuardUpdate() {
+    const action = nekoGuardAction || "install";
     const removing = action === "remove";
-    if (!window.confirm(`${removing ? "Remove" : "Inject"} the Neko resource guard ${removing ? "from" : "into"} every detected resource manifest?`)) return;
+    setModal(null);
     setNekoGuardBusy(true);
     try {
       const result = await api.updateNekoResourceGuards(action);
@@ -827,6 +851,7 @@ export default function App() {
       notify(error.message);
     } finally {
       setNekoGuardBusy(false);
+      setNekoGuardAction(null);
     }
   }
 
@@ -1911,7 +1936,7 @@ export default function App() {
                         <div className="anti-panel-title"><Eye size={17} /><span><strong>PLAYER OBSERVATION</strong><small>{nekoStatus.running ? "Live Neko telemetry, scores, and recent flags" : "Connected players now; install Neko Anti-Cheat for behavioural telemetry"}</small></span></div>
                         <div className="anti-player-list">
                           {observedNekoPlayers.slice(0, 8).map((player) => (
-                            <button className={String(inspectedNekoPlayerId) === String(player.id) ? "active" : ""} key={`${player.id}-${player.name}`} onClick={() => setInspectedNekoPlayerId(player.id)} title="Open Neko Player Intel and spectate controls">
+                            <button className={String(inspectedNekoPlayerId) === String(player.id) ? "active" : ""} key={`${player.id}-${player.name}`} onClick={() => { setInspectedNekoPlayerId(player.id); loadNekoStatus().catch(() => {}); }} title="Open Neko Player Intel and spectate controls">
                               <span><i />#{player.id}</span><strong>{player.name}</strong><small>{player.ping ?? "--"} ms // score {player.score ?? 0}</small><em>{player.flags?.length ? `${player.flags.length} FLAGS` : nekoStatus.running ? "OPEN INTEL / SPECTATE" : "NO EVENT STREAM"}</em>
                             </button>
                           ))}
@@ -1924,7 +1949,7 @@ export default function App() {
                         <div className="anti-panel-title"><ShieldCheck size={17} /><span><strong>ENGINE VERSION</strong><small>Installed runtime and entity defence state</small></span></div>
                         <div className={`neko-version-card ${nekoStatus.updateAvailable ? "outdated" : ""}`}>
                           <strong>{nekoStatus.version || (nekoStatus.installed ? "Installed" : "Not installed")}</strong>
-                          <span>{nekoStatus.updateAvailable ? `Out of date. Latest bundled engine is ${nekoStatus.latestVersion}. Click Update Engine.` : nekoStatus.running ? "Neko telemetry endpoint online" : nekoStatus.installed ? "Installed, waiting for resource start" : "Install Neko Anti-Cheat to activate version tracking"}</span>
+                          <span>{nekoStatus.pendingRestart ? `Update staged to ${nekoStatus.stagedVersion}. Restart neko-anticheat or FXServer to load it.` : nekoStatus.updateAvailable ? `Out of date. Latest bundled engine is ${nekoStatus.latestVersion}. Click Update Engine.` : nekoStatus.running ? "Neko telemetry endpoint online" : nekoStatus.installed ? "Installed, waiting for resource start" : "Install Neko Anti-Cheat to activate version tracking"}</span>
                           <i>{nekoStatus.resource || "neko-anticheat"} // latest {nekoStatus.latestVersion || "--"}</i>
                         </div>
                         <div className="neko-guard-actions">
@@ -2490,6 +2515,23 @@ export default function App() {
           </div>
         </Modal>
       )}
+      {modal === "nekoGuard" && (
+        <Modal title={nekoGuardAction === "remove" ? "REMOVE RESOURCE GUARD" : "INJECT RESOURCE GUARD"} onClose={() => { setModal(null); setNekoGuardAction(null); }}>
+          <div className="neko-install-confirm">
+            <div className="neko-install-core"><ShieldCheck size={34} /><span><strong>{nekoGuardAction === "remove" ? "GUARD REMOVAL" : "RESOURCE GUARD INJECTION"}</strong><small>{project?.resources?.length || 0} detected resource manifests</small></span></div>
+            <p>{nekoGuardAction === "remove" ? "WOLFHQ will remove the Neko guard line from every detected resource manifest. Restart affected resources afterwards." : "WOLFHQ will add a reversible Neko guard line to every detected resource manifest so Neko AC can report guarded resources."}</p>
+            <div className="neko-install-facts">
+              <div><span>ACTION</span><strong>{nekoGuardAction === "remove" ? "REMOVE" : "INJECT"}</strong></div>
+              <div><span>RESOURCE</span><strong>neko-anticheat</strong></div>
+              <div><span>SAFE UNDO</span><strong>YES</strong></div>
+            </div>
+            <div className="neko-install-actions">
+              <button type="button" onClick={() => { setModal(null); setNekoGuardAction(null); }}>CANCEL</button>
+              <button type="button" className="primary" onClick={performNekoGuardUpdate}>{nekoGuardAction === "remove" ? <Trash2 size={16} /> : <ShieldCheck size={16} />} {nekoGuardAction === "remove" ? "REMOVE GUARD" : "INJECT GUARD"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {inspectedNekoPlayer && (
         <Modal title="NEKO PLAYER INTEL" onClose={() => setInspectedNekoPlayerId(null)}>
           <div className="neko-player-modal">
@@ -2501,7 +2543,7 @@ export default function App() {
               <label>Optional watcher server ID<input value={spectatorServerId} onChange={(event) => setSpectatorServerId(event.target.value.replace(/\D/g, ""))} placeholder={nekoStatus.watcher ? `Registered: ${nekoStatus.watcher}` : "Auto if blank"} /></label>
               <button type="button" onClick={() => controlNekoSpectate("start", inspectedNekoPlayer.id)}><Eye size={16} /> START SPECTATE</button>
               <button type="button" className="stop" onClick={() => controlNekoSpectate("stop", inspectedNekoPlayer.id)}><X size={16} /> STOP SPECTATE</button>
-              <span>Leave blank for auto mode. For best results, join in-game and run /nekoacwatcher once from your staff client, then WOLFHQ can use that client as the spectate camera.</span>
+              <span>Desktop live observe is already active in this popup. GTA camera spectate needs a connected FiveM watcher client; run /nekoacwatcher in-game once for best results.</span>
             </div>
             <div className="neko-live-grid modal-grid">
               <div><span>HEALTH</span><strong>{inspectedNekoPlayer.telemetry?.health ?? "--"}</strong></div>

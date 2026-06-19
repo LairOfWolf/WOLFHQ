@@ -1097,6 +1097,10 @@ async function installNekoAntiCheat(options = {}) {
   await fs.writeFile(path.join(paths.resourceRoot, "client.lua"), files.client, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "server.lua"), files.server, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "resource_guard.lua"), files.guard, "utf8");
+  await fs.mkdir(path.join(paths.resourceRoot, "ui"), { recursive: true });
+  await fs.writeFile(path.join(paths.resourceRoot, "ui", "index.html"), files.uiHtml, "utf8");
+  await fs.writeFile(path.join(paths.resourceRoot, "ui", "style.css"), files.uiCss, "utf8");
+  await fs.writeFile(path.join(paths.resourceRoot, "ui", "app.js"), files.uiJs, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "README.md"), files.readme, "utf8");
   await fs.writeFile(path.join(paths.resourceRoot, "incidents.json"), "[]\n", { flag: "wx" }).catch(() => {});
   await fs.writeFile(path.join(paths.resourceRoot, "bans.json"), "[]\n", { flag: "wx" }).catch(() => {});

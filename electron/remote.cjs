@@ -1056,6 +1056,10 @@ class RemoteServer {
     await this.writeFile(path.join(paths.resourceRoot, "client.lua"), files.client);
     await this.writeFile(path.join(paths.resourceRoot, "server.lua"), files.server);
     await this.writeFile(path.join(paths.resourceRoot, "resource_guard.lua"), files.guard);
+    await this.mkdirRecursive(path.join(paths.resourceRoot, "ui"));
+    await this.writeFile(path.join(paths.resourceRoot, "ui", "index.html"), files.uiHtml);
+    await this.writeFile(path.join(paths.resourceRoot, "ui", "style.css"), files.uiCss);
+    await this.writeFile(path.join(paths.resourceRoot, "ui", "app.js"), files.uiJs);
     await this.writeFile(path.join(paths.resourceRoot, "README.md"), files.readme);
     await this.writeFile(path.join(paths.resourceRoot, "incidents.json"), "[]\n", { exclusive: true }).catch(() => {});
     await this.writeFile(path.join(paths.resourceRoot, "bans.json"), "[]\n", { exclusive: true }).catch(() => {});
