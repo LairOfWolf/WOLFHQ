@@ -100,7 +100,8 @@ class AiManager {
         provider: "anthropic",
         model: "claude-sonnet-4-6",
         endpoint: "https://api.anthropic.com/v1/messages",
-        encryptedKey: ""
+        encryptedKey: "",
+        maxOutputTokens: 4096
       };
     }
   }
@@ -111,6 +112,7 @@ class AiManager {
       provider: settings.provider,
       model: settings.model,
       endpoint: settings.endpoint,
+      maxOutputTokens: Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000)),
       hasApiKey: Boolean(settings.encryptedKey)
     };
   }
@@ -128,6 +130,7 @@ class AiManager {
       provider,
       model: String(input.model || "").trim() || (provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4"),
       endpoint,
+      maxOutputTokens: Math.max(512, Math.min(Number(input.maxOutputTokens) || current.maxOutputTokens || 4096, 16000)),
       encryptedKey: input.apiKey ? this.encrypt(String(input.apiKey).trim()) : current.encryptedKey || ""
     };
     await fs.writeFile(this.settingsPath(), JSON.stringify(next, null, 2), "utf8");
@@ -285,6 +288,7 @@ class AiManager {
     if (!apiKey && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(settings.endpoint)) {
       throw new Error("Add an AI API key in the AI workspace first.");
     }
+    const outputTokenLimit = Math.max(512, Math.min(Number(settings.maxOutputTokens) || 4096, 16000));
     const headers = { "Content-Type": "application/json" };
     let body;
     if (settings.provider === "anthropic") {
@@ -292,7 +296,7 @@ class AiManager {
       headers["anthropic-version"] = "2023-06-01";
       body = {
         model: settings.model,
-        max_tokens: 16000,
+        max_tokens: outputTokenLimit,
         system,
         messages: [{ role: "user", content: user }]
       };
@@ -301,7 +305,7 @@ class AiManager {
       body = /\/responses\/?$/i.test(new URL(settings.endpoint).pathname)
         ? {
             model: settings.model,
-            max_output_tokens: 16000,
+            max_output_tokens: outputTokenLimit,
             input: [
               { role: "system", content: system },
               { role: "user", content: user }
@@ -309,6 +313,7 @@ class AiManager {
           }
         : {
             model: settings.model,
+            max_tokens: outputTokenLimit,
             messages: [{ role: "system", content: system }, { role: "user", content: user }]
           };
     }

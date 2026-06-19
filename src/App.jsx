@@ -61,7 +61,7 @@ const api = window.neonCore || {
   deleteAccount: async () => null,
   getOpsSettings: async () => ({}),
   updateOpsSettings: async () => null,
-  getAiSettings: async () => ({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", hasApiKey: false }),
+  getAiSettings: async () => ({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", maxOutputTokens: 4096, hasApiKey: false }),
   saveAiSettings: async () => null,
   getAiModels: async () => ({ models: [], live: false }),
   searchAiFiles: async () => ({ indexedFiles: 0, results: [] }),
@@ -324,7 +324,7 @@ export default function App() {
   const [accountDraft, setAccountDraft] = useState({ username: "", role: "developer", password: "" });
   const [accountLogin, setAccountLogin] = useState({ id: "", password: "" });
   const [opsSettings, setOpsSettings] = useState({ crashDetection: true, autoRestart: false, restartCommand: "", discordWebhook: "", backupSchedule: "manual" });
-  const [aiSettings, setAiSettings] = useState({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", apiKey: "", hasApiKey: false });
+  const [aiSettings, setAiSettings] = useState({ provider: "anthropic", model: "claude-sonnet-4-6", endpoint: "https://api.anthropic.com/v1/messages", maxOutputTokens: 4096, apiKey: "", hasApiKey: false });
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiSearchQuery, setAiSearchQuery] = useState("");
   const [aiSearch, setAiSearch] = useState({ indexedFiles: 0, results: [] });
@@ -2214,9 +2214,10 @@ export default function App() {
                         </select></label>
                         <div className="ai-model-source"><Circle size={7} fill="currentColor" /> {aiModelsLive ? "LIVE MODELS FROM YOUR PROVIDER" : "CURRENT MODEL CATALOG"}</div>
                         <label>API endpoint<input value={aiSettings.endpoint} onChange={(event) => setAiSettings({ ...aiSettings, endpoint: event.target.value })} /></label>
+                        <label>Limit tokens<input type="number" min="512" max="16000" step="256" value={aiSettings.maxOutputTokens || 4096} onChange={(event) => setAiSettings({ ...aiSettings, maxOutputTokens: Number(event.target.value) || 4096 })} /></label>
                         <label>API key<input type="password" placeholder={aiSettings.hasApiKey ? "Encrypted key saved - leave blank to keep it" : "Enter provider API key"} value={aiSettings.apiKey} onChange={(event) => setAiSettings({ ...aiSettings, apiKey: event.target.value })} /></label>
                         <button onClick={saveAiProvider}><ShieldCheck size={13} /> ENCRYPT AND SAVE</button>
-                        <div className="ai-security"><LockKeyhole size={14} /><span>Keys are encrypted by Windows. Common credentials and tokens are redacted before file context is sent.</span></div>
+                        <div className="ai-security"><LockKeyhole size={14} /><span>Keys are encrypted by Windows. WOLFHQ uses your configured limit tokens for responses and redacts credentials before file context is sent.</span></div>
 
                         <div className="ai-section-title search-title"><Search size={14} /> FILE INTELLIGENCE</div>
                         <div className="ai-search">

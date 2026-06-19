@@ -116,11 +116,13 @@ test("searches contents, validates a provider proposal, backs up, and applies se
     provider: "openai-compatible",
     model: "wolfhq-test",
     endpoint,
-    apiKey: "local-test-key"
+    apiKey: "local-test-key",
+    maxOutputTokens: 2048
   });
   const settings = await manager.getSettings();
   assert.equal(settings.hasApiKey, true);
   assert.equal(settings.provider, "openai-compatible");
+  assert.equal(settings.maxOutputTokens, 2048);
   const models = await manager.listModels();
   assert.equal(models.live, true);
   assert.deepEqual(models.models, [{ id: "wolfhq-test", name: "WOLFHQ Test" }]);
@@ -135,6 +137,7 @@ test("searches contents, validates a provider proposal, backs up, and applies se
   assert.equal(proposal.files[0].path, configPath);
   assert.match(proposal.response, /prepared the requested/);
   assert.doesNotMatch(providerRequest, /private-license/);
+  assert.equal(JSON.parse(providerRequest).max_tokens, 2048);
 
   await manager.apply(proposal.files);
   assert.deepEqual(backups, ["pre-ai-edit"]);

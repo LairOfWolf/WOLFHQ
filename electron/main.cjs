@@ -1442,10 +1442,7 @@ ipcMain.handle("project:recent", async () => {
     try {
       const session = JSON.parse(await fs.readFile(sessionPath(), "utf8"));
       if (session.mode === "remote" && session.profileId) {
-        const profile = (await readProfiles()).find((candidate) => candidate.id === session.profileId);
-        if (!profile?.encryptedSecret && profile?.authType !== "key") return null;
-        const result = await connectRemoteProfile(profile, { rememberSecret: true });
-        return result.connected ? result.project : null;
+        return null;
       }
       const recentPath = session.rootPath || (await fs.readFile(path.join(app.getPath("userData"), "recent-project.txt"), "utf8")).trim();
       if (!recentPath) return null;

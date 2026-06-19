@@ -224,6 +224,17 @@ RegisterNUICallback('stopSpectate', function(_, cb)
     cb({ ok = true })
 end)
 
+RegisterNUICallback('profile', function(data, cb)
+    local profile = tostring(data and data.profile or 'Balanced')
+    TriggerServerEvent('nekoac:adminProfile', profile)
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('clearIncidents', function(_, cb)
+    TriggerServerEvent('nekoac:adminClear')
+    cb({ ok = true })
+end)
+
 RegisterNetEvent('nekoac:adminData', function(payload)
     SendNUIMessage({ type = 'data', payload = payload })
 end)
@@ -238,26 +249,50 @@ end)
   </head>
   <body>
     <main id="app" class="hidden">
-      <header>
+      <header class="hero">
         <div class="mark">!</div>
         <section>
+          <span>WOLFHQ IN-GAME ADMIN</span>
           <h1>NEKO ANTI-CHEAT</h1>
-          <p>In-game WOLFHQ command matrix</p>
+          <p>Runtime command matrix, player telemetry, incidents, inventory, and spectate controls.</p>
         </section>
-        <button id="close">CLOSE</button>
+        <div class="hero-actions">
+          <button id="refresh">REFRESH</button>
+          <button id="close">CLOSE</button>
+        </div>
       </header>
-      <div class="stats">
-        <article><span>VERSION</span><strong id="version">--</strong></article>
-        <article><span>PROFILE</span><strong id="profile">--</strong></article>
-        <article><span>PLAYERS</span><strong id="playersCount">0</strong></article>
-        <article><span>INCIDENTS</span><strong id="incidentCount">0</strong></article>
-      </div>
+      <section class="stats">
+        <article><span>ENGINE</span><strong id="version">--</strong><small>runtime version</small></article>
+        <article><span>PROFILE</span><strong id="profile">--</strong><small>enforcement mode</small></article>
+        <article><span>PLAYERS</span><strong id="playersCount">0</strong><small>online telemetry</small></article>
+        <article><span>INCIDENTS</span><strong id="incidentCount">0</strong><small>stored warnings</small></article>
+        <article><span>BANS</span><strong id="banCount">0</strong><small>local Neko list</small></article>
+        <article><span>GUARDED</span><strong id="guardCount">0</strong><small>resource signals</small></article>
+      </section>
+      <section class="toolbar">
+        <div>
+          <span>DEFENCE PROFILE</span>
+          <button data-profile="Monitor">MONITOR</button>
+          <button data-profile="Balanced">BALANCED</button>
+          <button data-profile="Strict">STRICT</button>
+        </div>
+        <button id="stopSpectate">STOP SPECTATE</button>
+        <button id="clearIncidents">CLEAR WARNINGS</button>
+      </section>
       <section class="grid">
-        <article class="panel">
-          <div class="title">LIVE PLAYERS <button id="refresh">REFRESH</button></div>
+        <article class="panel players-panel">
+          <div class="title">LIVE PLAYERS <small>click a row to inspect</small></div>
           <div id="players"></div>
         </article>
-        <article class="panel">
+        <article class="panel inspect-panel">
+          <div class="title">PLAYER INSPECTOR <small id="selectedState">no target selected</small></div>
+          <div id="inspector" class="empty">Select a player to view identifiers, telemetry, inventory, flags, and spectate controls.</div>
+        </article>
+        <article class="panel module-panel">
+          <div class="title">DEFENCE MODULES</div>
+          <div id="modules"></div>
+        </article>
+        <article class="panel warning-panel">
           <div class="title">WARNING STREAM</div>
           <div id="incidents"></div>
         </article>
@@ -268,8 +303,8 @@ end)
   </body>
 </html>
 `;
-  const uiCss = `@font-face{font-family:Rajdhani;src:local("Arial")}*{box-sizing:border-box}body{margin:0;background:transparent;color:#dff7ff;font-family:Rajdhani,Arial,sans-serif}#app{position:absolute;inset:5vh 6vw;padding:18px;border:1px solid rgba(255,76,139,.45);background:radial-gradient(circle at 85% 0,rgba(255,76,139,.16),transparent 32%),rgba(4,8,18,.94);box-shadow:0 0 70px rgba(255,76,139,.18)}.hidden{display:none}header{height:76px;display:flex;align-items:center;gap:16px;border-bottom:1px solid rgba(255,76,139,.25)}.mark{width:48px;height:48px;border:1px solid #ff5d91;color:#ff8ab0;display:grid;place-items:center;font-size:28px;transform:rotate(45deg)}.mark::first-letter{transform:rotate(-45deg)}h1{margin:0;color:#fff;font-size:26px;letter-spacing:2px}p{margin:4px 0 0;color:#b7869f;font-size:14px}button{border:1px solid rgba(88,255,209,.4);background:rgba(88,255,209,.08);color:#7dffdc;height:34px;padding:0 14px;cursor:pointer;font-weight:700}header button{margin-left:auto}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.stats article{padding:12px;border:1px solid rgba(88,255,209,.18);background:rgba(88,255,209,.035)}span{display:block;color:#7fb7ae;font-size:11px;letter-spacing:1px}strong{display:block;margin-top:5px;color:#eafff9;font-size:22px}.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;height:calc(100% - 190px)}.panel{min-height:0;padding:14px;border:1px solid rgba(112,137,175,.18);background:rgba(7,11,23,.86);overflow:auto}.title{display:flex;align-items:center;justify-content:space-between;color:#ffbdd2;font-size:15px;letter-spacing:1px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,76,139,.18)}.player,.incident{display:grid;grid-template-columns:70px 1fr auto;gap:10px;align-items:center;min-height:54px;padding:10px;border:1px solid rgba(88,255,209,.12);background:rgba(88,255,209,.03);margin-bottom:8px}.incident{grid-template-columns:1fr auto}.player small,.incident small{display:block;color:#9bb4c2;font-size:12px;margin-top:3px}.player b,.incident b{color:#fff;font-size:16px}.player button{height:30px}.empty{padding:24px;text-align:center;color:#7c8e9e;border:1px dashed rgba(112,137,175,.2)}footer{position:absolute;left:18px;right:18px;bottom:12px;color:#73909e;font-size:12px;border-top:1px solid rgba(112,137,175,.14);padding-top:10px}`;
-  const uiJs = `const app=document.getElementById('app');const players=document.getElementById('players');const incidents=document.getElementById('incidents');const res=(name,data={})=>fetch('https://neko-anticheat/'+name,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});document.getElementById('close').onclick=()=>res('close');document.getElementById('refresh').onclick=()=>res('refresh');window.addEventListener('message',event=>{const msg=event.data||{};if(msg.type==='open')app.classList.remove('hidden');if(msg.type==='close')app.classList.add('hidden');if(msg.type==='data')render(msg.payload||{})});function render(data){document.getElementById('version').textContent=data.version||'--';document.getElementById('profile').textContent=data.profile||'--';document.getElementById('playersCount').textContent=(data.players||[]).length;document.getElementById('incidentCount').textContent=data.incidentCount||0;players.innerHTML=(data.players||[]).map(p=>'<div class="player"><span>#'+p.id+'</span><b>'+esc(p.name)+'<small>'+((p.ping||'--')+' ms // score '+(p.score||0))+'</small></b><button data-id="'+p.id+'">SPECTATE</button></div>').join('')||'<div class="empty">No live players.</div>';incidents.innerHTML=(data.incidents||[]).slice(-10).reverse().map(i=>'<div class="incident"><b>'+esc(i.moduleLabel||i.module||'Warning')+'<small>'+esc(i.name||'server')+' // severity '+(i.severity||0)+'</small></b><small>'+esc(i.message||'')+'</small></div>').join('')||'<div class="empty">No warnings.</div>';players.querySelectorAll('button[data-id]').forEach(btn=>btn.onclick=()=>res('spectate',{target:Number(btn.dataset.id)}))}function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}`;
+  const uiCss = `@font-face{font-family:Rajdhani;src:local("Arial")}*{box-sizing:border-box}body{margin:0;background:transparent;color:#e7fbff;font-family:Rajdhani,Arial,sans-serif}button{border:1px solid rgba(88,255,209,.42);background:linear-gradient(135deg,rgba(88,255,209,.1),rgba(80,223,249,.05));color:#7dffdc;min-height:34px;padding:0 14px;cursor:pointer;font-weight:800;letter-spacing:.8px}button:hover{background:rgba(88,255,209,.16);box-shadow:0 0 18px rgba(88,255,209,.12)}#app{position:absolute;inset:3.5vh 4vw;padding:18px;border:1px solid rgba(255,76,139,.48);background:radial-gradient(circle at 85% 0,rgba(255,76,139,.2),transparent 31%),radial-gradient(circle at 12% 12%,rgba(80,223,249,.12),transparent 26%),rgba(4,8,18,.96);box-shadow:0 0 80px rgba(255,76,139,.22);overflow:hidden}.hidden{display:none}.hero{height:92px;display:flex;align-items:center;gap:16px;border-bottom:1px solid rgba(255,76,139,.27)}.mark{width:56px;height:56px;border:1px solid #ff5d91;color:#ff8ab0;display:grid;place-items:center;font-size:31px;transform:rotate(45deg);box-shadow:inset 0 0 28px rgba(255,76,139,.08),0 0 20px rgba(255,76,139,.16)}.mark::first-letter{transform:rotate(-45deg)}.hero section{min-width:0;flex:1}.hero span,.stats span,.toolbar span{display:block;color:#74dfd7;font-size:11px;letter-spacing:1.8px}.hero h1{margin:2px 0 0;color:#fff;font-size:31px;letter-spacing:2.5px}.hero p{margin:5px 0 0;color:#c98fa8;font-size:14px}.hero-actions{display:flex;gap:9px}.hero-actions #close{border-color:rgba(255,93,145,.45);background:rgba(255,76,139,.08);color:#ffb3cb}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;margin:14px 0}.stats article{min-height:78px;padding:11px;border:1px solid rgba(88,255,209,.17);background:linear-gradient(135deg,rgba(88,255,209,.055),rgba(255,76,139,.025));position:relative;overflow:hidden}.stats article:after{content:"";position:absolute;left:0;right:55%;bottom:0;height:2px;background:#58ffd1;box-shadow:0 0 12px #58ffd1}.stats strong{display:block;margin-top:6px;color:#eafff9;font-size:24px}.stats small{display:block;color:#7395a8;font-size:11px;margin-top:2px}.toolbar{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:12px}.toolbar>div{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid rgba(157,115,255,.18);background:rgba(157,115,255,.04)}.toolbar span{margin-right:8px;color:#bda7ff}.toolbar button.active{border-color:#ff5d91;background:rgba(255,76,139,.14);color:#ffd6e2}.grid{display:grid;grid-template-columns:.85fr 1.15fr;grid-template-rows:minmax(230px,.9fr) minmax(220px,1fr);gap:12px;height:calc(100% - 250px);min-height:0}.panel{min-height:0;padding:14px;border:1px solid rgba(112,137,175,.19);background:linear-gradient(145deg,rgba(8,13,27,.94),rgba(5,8,18,.9));overflow:auto;scrollbar-color:#5d2945 transparent}.title{display:flex;align-items:center;justify-content:space-between;color:#ffbdd2;font-size:16px;font-weight:800;letter-spacing:1.2px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,76,139,.2)}.title small{color:#7f99a9;font-size:11px;font-weight:600}.player{display:grid;grid-template-columns:46px 1fr auto;gap:10px;align-items:center;min-height:58px;padding:10px;border:1px solid rgba(88,255,209,.13);background:rgba(88,255,209,.035);margin-bottom:8px;cursor:pointer}.player.selected{border-color:#ff5d91;background:rgba(255,76,139,.1);box-shadow:inset 3px 0 #ff5d91}.player .id{color:#75fff0}.player b,.incident b,.module b{color:#fff;font-size:16px}.player small,.incident small,.module small{display:block;color:#9fb8c8;font-size:12px;margin-top:3px}.player .score{color:#ffcf70}.inspect-hero{padding:12px;border:1px solid rgba(255,76,139,.21);background:rgba(255,76,139,.06);margin-bottom:10px}.inspect-hero h2{margin:0;color:#fff;font-size:24px}.inspect-hero p{margin:4px 0 0;color:#b6d7df}.inspect-actions{display:flex;gap:8px;margin-top:10px}.kv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.kv-grid div,.inventory div,.identifier{padding:8px;border:1px solid rgba(80,223,249,.15);background:rgba(80,223,249,.035);min-width:0}.kv-grid span,.inventory span{color:#78a9b8;font-size:10px;letter-spacing:1px}.kv-grid strong,.inventory strong{display:block;color:#dffcff;font-size:14px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.subhead{margin:12px 0 7px;color:#ffbdd2;font-size:13px;letter-spacing:1px}.inventory{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.identifier{color:#91e9ff;font-size:12px;margin-bottom:6px;word-break:break-all}.module{display:grid;grid-template-columns:1fr auto;gap:8px;padding:10px;border:1px solid rgba(88,255,209,.12);background:rgba(88,255,209,.035);margin-bottom:8px}.module i{color:#58ffd1;font-style:normal;font-size:11px}.incident{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;min-height:54px;padding:10px;border:1px solid rgba(255,190,76,.22);background:rgba(255,190,76,.045);margin-bottom:8px}.incident .msg{color:#ffd179}.empty{padding:24px;text-align:center;color:#8ba2b2;border:1px dashed rgba(112,137,175,.24);background:rgba(7,11,23,.55)}footer{position:absolute;left:18px;right:18px;bottom:10px;color:#7795a8;font-size:12px;border-top:1px solid rgba(112,137,175,.14);padding-top:9px}`;
+  const uiJs = `const app=document.getElementById('app');const players=document.getElementById('players');const incidents=document.getElementById('incidents');const modules=document.getElementById('modules');const inspector=document.getElementById('inspector');const selectedState=document.getElementById('selectedState');let current={players:[],incidents:[],modules:{}};let selectedId=null;const res=(name,data={})=>fetch('https://neko-anticheat/'+name,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});document.getElementById('close').onclick=()=>res('close');document.getElementById('refresh').onclick=()=>res('refresh');document.getElementById('stopSpectate').onclick=()=>res('stopSpectate');document.getElementById('clearIncidents').onclick=()=>res('clearIncidents');document.querySelectorAll('[data-profile]').forEach(btn=>btn.onclick=()=>res('profile',{profile:btn.dataset.profile}));window.addEventListener('message',event=>{const msg=event.data||{};if(msg.type==='open'){app.classList.remove('hidden');res('refresh')}if(msg.type==='close')app.classList.add('hidden');if(msg.type==='data')render(msg.payload||{})});function render(data){current=data;const list=data.players||[];if(!selectedId&&list[0])selectedId=list[0].id;if(selectedId&&!list.some(p=>Number(p.id)===Number(selectedId)))selectedId=list[0]&&list[0].id;document.getElementById('version').textContent=data.version||'--';document.getElementById('profile').textContent=data.profile||'--';document.getElementById('playersCount').textContent=list.length;document.getElementById('incidentCount').textContent=data.incidentCount||0;document.getElementById('banCount').textContent=data.banCount||0;document.getElementById('guardCount').textContent=Object.keys(data.protectedResources||{}).length;document.querySelectorAll('[data-profile]').forEach(btn=>btn.classList.toggle('active',btn.dataset.profile===data.profile));players.innerHTML=list.map(p=>'<div class=\"player '+(Number(p.id)===Number(selectedId)?'selected':'')+'\" data-id=\"'+p.id+'\"><span class=\"id\">#'+p.id+'</span><b>'+esc(p.name)+'<small>'+(p.ping||'--')+' ms ping // '+(p.inventoryCount||0)+' items</small></b><span class=\"score\">score '+(p.score||0)+'</span></div>').join('')||'<div class=\"empty\">No live players.</div>';players.querySelectorAll('[data-id]').forEach(row=>row.onclick=()=>{selectedId=Number(row.dataset.id);render(current)});renderInspector(list.find(p=>Number(p.id)===Number(selectedId)));renderModules(data.modules||{});incidents.innerHTML=(data.incidents||[]).slice(-12).reverse().map(i=>'<div class=\"incident\"><b>'+esc(i.moduleLabel||i.module||'Warning')+'<small>'+esc(i.name||'server')+' // severity '+(i.severity||0)+'</small></b><span class=\"msg\">'+esc(i.message||'')+'</span></div>').join('')||'<div class=\"empty\">No warnings.</div>'}function renderInspector(p){if(!p){selectedState.textContent='no target selected';inspector.className='empty';inspector.innerHTML='Select a player to view identifiers, telemetry, inventory, flags, and spectate controls.';return}const t=p.telemetry||{};const coords=t.coords?('X '+fmt(t.coords.x)+' / Y '+fmt(t.coords.y)+' / Z '+fmt(t.coords.z)):'Waiting for heartbeat';selectedState.textContent='#'+p.id+' // '+(p.ping||'--')+' ms';inspector.className='';inspector.innerHTML='<div class=\"inspect-hero\"><h2>'+esc(p.name)+'</h2><p>Server ID #'+p.id+' // '+(p.ping||'--')+' ms ping // score '+(p.score||0)+'</p><div class=\"inspect-actions\"><button id=\"spectateSelected\">SPECTATE</button><button id=\"stopSelected\">STOP SPECTATE</button></div></div><div class=\"kv-grid\"><div><span>HEALTH</span><strong>'+safe(t.health)+'</strong></div><div><span>ARMOUR</span><strong>'+safe(t.armour)+'</strong></div><div><span>SPEED</span><strong>'+fmt(t.speed)+'</strong></div><div><span>VISIBLE</span><strong>'+yes(t.visible)+'</strong></div><div><span>VEHICLE</span><strong>'+yes(t.inVehicle)+'</strong></div><div><span>DEAD</span><strong>'+yes(t.dead)+'</strong></div><div><span>WEAPON</span><strong>'+safe(t.weapon)+'</strong></div><div><span>LAST HEARTBEAT</span><strong>'+safe(p.lastHeartbeat)+'</strong></div><div><span>POSITION</span><strong>'+esc(coords)+'</strong></div></div><div class=\"subhead\">INVENTORY SNAPSHOT</div><div class=\"inventory\">'+((p.inventory||[]).slice(0,9).map(item=>'<div><span>'+esc(item.name||item.label||'item')+'</span><strong>x'+(item.count||1)+'</strong></div>').join('')||'<div><span>NO ITEMS</span><strong>Framework inventory empty</strong></div>')+'</div><div class=\"subhead\">IDENTIFIERS</div>'+((p.identifiers||[]).map(id=>'<div class=\"identifier\">'+esc(id)+'</div>').join('')||'<div class=\"identifier\">No identifiers exposed</div>')+'<div class=\"subhead\">RECENT FLAGS</div>'+((p.flags||[]).slice(-4).reverse().map(flag=>'<div class=\"incident\"><b>'+esc(flag.moduleLabel||flag.module)+'<small>severity '+(flag.severity||0)+'</small></b><span class=\"msg\">'+esc(flag.message||'')+'</span></div>').join('')||'<div class=\"empty\">No recent flags for this player.</div>');document.getElementById('spectateSelected').onclick=()=>res('spectate',{target:Number(p.id)});document.getElementById('stopSelected').onclick=()=>res('stopSpectate')}function renderModules(map){const names=Object.keys(map);modules.innerHTML=(names.length?names:['PLAYER_INTEGRITY','MOVEMENT_ANALYSIS','WEAPON_CONTROL','EVENT_FIREWALL','ENTITY_DEFENCE','IDENTITY_SIGNALS']).map(key=>'<div class=\"module\"><b>'+esc(map[key]||key.replaceAll('_',' '))+'<small>'+esc(key)+'</small></b><i>ACTIVE</i></div>').join('')}function esc(value){return String(value??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}function safe(v){return v===undefined||v===null||v===''?'--':esc(v)}function fmt(v){return typeof v==='number'?v.toFixed(2):safe(v)}function yes(v){return v===true?'YES':v===false?'NO':'--'}`;
   const guard = `local guardedResource = GetCurrentResourceName()
 if guardedResource ~= 'neko-anticheat' then
     if IsDuplicityVersion() then
@@ -647,6 +682,24 @@ end
 RegisterNetEvent('nekoac:adminDataRequest', function()
     local src = source
     if src <= 0 then return end
+    TriggerClientEvent('nekoac:adminData', src, statusPayload())
+end)
+
+RegisterNetEvent('nekoac:adminProfile', function(profile)
+    local src = source
+    if src <= 0 then return end
+    profile = tostring(profile or '')
+    if not profiles[profile] then profile = 'Balanced' end
+    runtimeSettings.profile = profile
+    saveJson(SETTINGS_FILE, runtimeSettings)
+    TriggerClientEvent('nekoac:adminData', src, statusPayload())
+end)
+
+RegisterNetEvent('nekoac:adminClear', function()
+    local src = source
+    if src <= 0 then return end
+    incidents = {}
+    saveJson(INCIDENTS_FILE, incidents)
     TriggerClientEvent('nekoac:adminData', src, statusPayload())
 end)
 
