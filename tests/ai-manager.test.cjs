@@ -16,6 +16,41 @@ test("redacts common server credentials", () => {
   assert.match(redacted, /REDACTED/);
 });
 
+test("reports provider account rejection while keeping the configured token limit", async (context) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "wolfhq-ai-limit-"));
+  context.after(() => fs.rm(temp, { recursive: true, force: true }));
+  const provider = http.createServer((request, response) => {
+    request.resume();
+    response.writeHead(402, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ error: { message: "Your credit balance is too low." } }));
+  });
+  await new Promise((resolve) => provider.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise((resolve) => provider.close(resolve)));
+
+  const manager = new AiManager({
+    userData: temp,
+    encrypt: (value) => `encrypted:${value}`,
+    decrypt: (value) => value.replace(/^encrypted:/, ""),
+    getContext: () => ({ project: { rootPath: temp, tree: [] } }),
+    readText: async () => "",
+    writeText: async () => {},
+    createBackup: async () => {},
+    audit: async () => {}
+  });
+  await manager.saveSettings({
+    provider: "openai-compatible",
+    model: "wolfhq-test",
+    endpoint: `http://127.0.0.1:${provider.address().port}/v1/chat/completions`,
+    apiKey: "local-test-key",
+    maxOutputTokens: 1024
+  });
+
+  await assert.rejects(
+    () => manager.propose("Check this server."),
+    /Limit tokens setting is active \(1024\)/
+  );
+});
+
 test("searches contents, validates a provider proposal, backs up, and applies selected files", async (context) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "wolfhq-ai-"));
   context.after(() => fs.rm(temp, { recursive: true, force: true }));

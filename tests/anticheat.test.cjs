@@ -41,19 +41,23 @@ test("generates the installable Neko Anti-Cheat resource files", () => {
   assert.match(files.client, /RegisterCommand\('neko'/);
   assert.match(files.client, /nekoac:adminProfile/);
   assert.match(files.client, /nekoac:adminClear/);
+  assert.match(files.client, /nekoac:adminAction/);
   assert.match(files.guard, /nekoac:resourceGuard/);
   assert.match(files.uiHtml, /NEKO ANTI-CHEAT/);
   assert.match(files.uiHtml, /PLAYER INSPECTOR/);
+  assert.match(files.uiHtml, /PLAYER ACTIONS/);
   assert.match(files.uiHtml, /CLEAR WARNINGS/);
+  assert.doesNotMatch(files.uiHtml, /DEFENCE MODULES|WARNING STREAM/);
   assert.match(files.uiCss, /#app/);
   assert.match(files.uiJs, /spectate/);
-  assert.match(files.uiJs, /Limit tokens|DEFENCE PROFILE|renderInspector/);
+  assert.match(files.uiJs, /playerAction|renderActions|renderInspector/);
   assert.match(files.server, /SetHttpHandler/);
   assert.match(files.server, /req\.path:match\('\/status\$'\)/);
   assert.match(files.server, /req\.path:match\('\/spectate\$'\)/);
   assert.match(files.server, /nekoac:adminDataRequest/);
   assert.match(files.server, /nekoac:adminProfile/);
   assert.match(files.server, /nekoac:adminClear/);
+  assert.match(files.server, /nekoac:adminAction/);
   assert.match(files.readme, /WOLFHQ/);
 });
 

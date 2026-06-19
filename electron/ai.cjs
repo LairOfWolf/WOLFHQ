@@ -319,7 +319,13 @@ class AiManager {
     }
     const response = await fetch(settings.endpoint, { method: "POST", headers, body: JSON.stringify(body) });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error?.message || data.error || `AI provider returned HTTP ${response.status}.`);
+    if (!response.ok) {
+      const providerMessage = String(data.error?.message || data.error || `AI provider returned HTTP ${response.status}.`);
+      if (/credit|balance|billing|quota|insufficient/i.test(providerMessage)) {
+        throw new Error(`Your Limit tokens setting is active (${outputTokenLimit}), but the AI provider rejected the API key/account before WOLFHQ could run the request. Check provider API access or switch to another configured endpoint.`);
+      }
+      throw new Error(providerMessage);
+    }
     if (settings.provider === "anthropic") {
       return (data.content || []).filter((part) => part.type === "text").map((part) => part.text).join("\n");
     }
