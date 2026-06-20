@@ -1,4 +1,4 @@
-# WOLFHQ // FiveM Command Center v2.1.6
+# WOLFHQ // FiveM Command Center v2.1.7
 
 A local Electron desktop interface for inspecting and editing FiveM server projects.
 
