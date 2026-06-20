@@ -661,6 +661,20 @@ button { color: inherit; }
 .ai-message-text { color: #d5e5eb; font: 14px/1.75 "JetBrains Mono"; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ai-message.thinking .ai-message-text { display: flex; align-items: center; gap: 9px; color: #a995e5; }
 .ai-message.thinking svg { animation: spin .8s linear infinite; }
+.ai-apply-report { margin: 8px 0 18px; border: 1px solid rgba(88, 255, 209, .24); background: linear-gradient(135deg, rgba(88, 255, 209, .055), rgba(7, 11, 23, .96)); box-shadow: inset 3px 0 rgba(88, 255, 209, .65); }
+.ai-apply-report-head { min-height: 56px; padding: 11px 14px; display: flex; align-items: center; gap: 10px; color: var(--green); border-bottom: 1px solid rgba(88, 255, 209, .15); }
+.ai-apply-report-head span { display: flex; flex-direction: column; gap: 4px; }
+.ai-apply-report-head strong { color: #dffff6; font-size: 13px; letter-spacing: .8px; }
+.ai-apply-report-head small { color: #7ca99d; font: 10px "JetBrains Mono"; }
+.ai-apply-report-files { padding: 10px 12px; display: grid; gap: 7px; }
+.ai-apply-report-files div { padding: 8px; border: 1px solid rgba(88, 255, 209, .14); background: rgba(88, 255, 209, .035); }
+.ai-apply-report-files div.unchanged { border-color: rgba(255, 190, 76, .22); background: rgba(255, 190, 76, .035); }
+.ai-apply-report-files span { min-width: 0; display: flex; align-items: center; gap: 8px; color: #dafdf5; }
+.ai-apply-report-files strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px "JetBrains Mono"; }
+.ai-apply-report-files small { display: block; margin-top: 5px; color: #86a69d; font: 9px "JetBrains Mono"; }
+.ai-next-steps { padding: 10px 14px 12px; border-top: 1px solid rgba(88, 255, 209, .12); color: #b7d6cf; }
+.ai-next-steps strong { color: var(--cyan); font: 10px "JetBrains Mono"; letter-spacing: 1px; }
+.ai-next-steps p { margin: 7px 0 0; color: #a7c5bd; font: 11px/1.5 "JetBrains Mono"; }
 .ai-composer { min-height: 92px; display: grid; grid-template-columns: minmax(0, 1fr) 110px; border: 1px solid rgba(157, 115, 255, .28); background: #080b18; }
 .ai-composer textarea { min-width: 0; padding: 14px 16px; border: 0; outline: 0; resize: none; background: transparent; color: #e0edf2; font: 14px/1.55 "JetBrains Mono"; }
 .ai-composer textarea::placeholder { color: #5e7388; }

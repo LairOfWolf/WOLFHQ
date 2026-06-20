@@ -1,5 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 
 const MAX_CONTEXT_FILES = 48;
@@ -32,6 +33,38 @@ const FALLBACK_MODELS = {
 function normalizeProvider(value) {
   if (value === "openai-compatible" || value === "claude-code") return value;
   return "anthropic";
+}
+
+function hashText(value) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 12);
+}
+
+function inferResourceName(relativePath) {
+  const parts = String(relativePath || "").split(/[\\/]+/).filter(Boolean);
+  const resourcesIndex = parts.findIndex((part) => part.toLowerCase() === "resources");
+  if (resourcesIndex === -1) return "";
+  for (const part of parts.slice(resourcesIndex + 1)) {
+    if (/^\[.+\]$/.test(part)) continue;
+    return part;
+  }
+  return "";
+}
+
+function inferApplyNextSteps(files) {
+  const changed = files.filter((file) => file.changed);
+  const resources = [...new Set(changed.map((file) => inferResourceName(file.relativePath)).filter(Boolean))];
+  const steps = [];
+  if (resources.length) {
+    steps.push(`Restart changed resource${resources.length === 1 ? "" : "s"}: ${resources.map((name) => `restart ${name}`).join(", ")}.`);
+  }
+  if (changed.some((file) => /config\.(lua|js|json)$/i.test(file.relativePath))) {
+    steps.push("If the resource caches config at startup, restart the resource or restart FXServer.");
+  }
+  if (changed.some((file) => /html|ui|nui|web/i.test(file.relativePath))) {
+    steps.push("Close and reopen the in-game UI, then rejoin if the client cached old NUI files.");
+  }
+  steps.push("Rescan WOLFHQ and open the changed file if you want to confirm the saved content.");
+  return steps;
 }
 
 function flattenTree(nodes, files = []) {
@@ -651,14 +684,42 @@ Rules:
   async apply(changes) {
     const files = this.projectFiles();
     const allowed = new Set(files.map((file) => file.path));
+    const fileByPath = new Map(files.map((file) => [file.path, file]));
     const selected = (Array.isArray(changes) ? changes : []).filter((change) =>
       allowed.has(change.path) && typeof change.content === "string"
     );
     if (!selected.length) throw new Error("Select at least one AI change to apply.");
-    await this.createBackup("pre-ai-edit");
-    for (const change of selected) await this.writeText(change.path, change.content);
-    await this.audit("ai.applied", { files: selected.map((change) => change.path) });
-    return { ok: true, files: selected.map((change) => change.path) };
+    const backup = await this.createBackup("pre-ai-edit");
+    const applied = [];
+    for (const change of selected) {
+      const current = await this.readText(change.path).catch(() => "");
+      const proposed = String(change.content);
+      const changed = current !== proposed;
+      if (changed) await this.writeText(change.path, proposed);
+      const saved = await this.readText(change.path);
+      const verified = saved === proposed;
+      if (!verified) throw new Error(`WOLFHQ wrote ${change.path}, but verification failed. Check file permissions or SFTP access.`);
+      const meta = fileByPath.get(change.path) || {};
+      applied.push({
+        path: change.path,
+        relativePath: meta.relativePath || change.relativePath || change.path,
+        explanation: String(change.explanation || "AI-applied edit"),
+        changed,
+        verified,
+        beforeHash: hashText(current),
+        afterHash: hashText(saved)
+      });
+    }
+    const changedFiles = applied.filter((file) => file.changed);
+    await this.audit("ai.applied", { files: applied.map((file) => file.path), changed: changedFiles.map((file) => file.path) });
+    return {
+      ok: true,
+      backup: backup?.path || backup?.backupPath || "pre-ai-edit",
+      files: applied,
+      changedFiles: changedFiles.map((file) => file.path),
+      unchangedFiles: applied.filter((file) => !file.changed).map((file) => file.path),
+      nextSteps: inferApplyNextSteps(applied)
+    };
   }
 }
 

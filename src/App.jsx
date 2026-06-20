@@ -339,6 +339,7 @@ export default function App() {
   const [aiSearchQuery, setAiSearchQuery] = useState("");
   const [aiSearch, setAiSearch] = useState({ indexedFiles: 0, results: [] });
   const [aiProposal, setAiProposal] = useState(null);
+  const [aiApplyReport, setAiApplyReport] = useState(null);
   const [aiSelected, setAiSelected] = useState({});
   const [aiModels, setAiModels] = useState(AI_MODEL_FALLBACKS.anthropic);
   const [aiModelsLive, setAiModelsLive] = useState(false);
@@ -1343,6 +1344,7 @@ export default function App() {
     if (aiBusy) return;
     setAiMessages([]);
     setAiProposal(null);
+    setAiApplyReport(null);
     setAiSelected({});
     setAiPrompt("");
     notify("New AI chat started");
@@ -1364,6 +1366,7 @@ export default function App() {
     if (question.length < 2 || aiBusy) return;
     setAiBusy(true);
     setAiProposal(null);
+    setAiApplyReport(null);
     setAiPrompt("");
     setAiMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", text: question }]);
     try {
@@ -1391,13 +1394,22 @@ export default function App() {
     if (!window.confirm(`Apply ${selected.length} reviewed AI file change${selected.length === 1 ? "" : "s"}? WOLFHQ will create a restore point first.`)) return;
     setAiBusy(true);
     try {
-      await api.applyAiChanges(selected);
+      const report = await api.applyAiChanges(selected);
       setAiProposal(null);
+      setAiApplyReport(report);
       setAiSelected({});
       setTabs([]);
       setActivePath("");
       await rescan();
-      notify("AI changes applied after creating a restore point");
+      const changedCount = report.changedFiles?.length || 0;
+      const unchangedCount = report.unchangedFiles?.length || 0;
+      setAiMessages((current) => [...current, {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: `Applied and verified ${changedCount} changed file${changedCount === 1 ? "" : "s"}.${unchangedCount ? ` ${unchangedCount} selected file${unchangedCount === 1 ? " was" : "s were"} already unchanged.` : ""}`,
+        model: aiSettings.model
+      }]);
+      notify(`${changedCount} AI file changes verified`);
     } catch (error) {
       notify(error.message);
     } finally {
@@ -2337,6 +2349,27 @@ export default function App() {
                             </div>
                           ))}
                           {aiBusy && <div className="ai-message assistant thinking"><div className="ai-message-role">WOLFHQ AI</div><div className="ai-message-text"><RefreshCw size={16} /> Reading relevant server files and preparing an answer...</div></div>}
+
+                          {aiApplyReport && (
+                            <div className="ai-apply-report">
+                              <div className="ai-apply-report-head">
+                                <Check size={17} />
+                                <span><strong>AI EDITS SAVED AND VERIFIED</strong><small>{aiApplyReport.changedFiles?.length || 0} changed // {aiApplyReport.unchangedFiles?.length || 0} unchanged // backup {aiApplyReport.backup || "created"}</small></span>
+                              </div>
+                              <div className="ai-apply-report-files">
+                                {(aiApplyReport.files || []).map((file) => (
+                                  <div key={file.path} className={file.changed ? "changed" : "unchanged"}>
+                                    <span>{file.changed ? <Check size={13} /> : <Circle size={9} fill="currentColor" />}<strong>{file.relativePath || file.path}</strong></span>
+                                    <small>{file.changed ? `changed and verified // ${file.beforeHash} -> ${file.afterHash}` : "selected but already matched the proposed content"}</small>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="ai-next-steps">
+                                <strong>WHAT TO DO NEXT</strong>
+                                {(aiApplyReport.nextSteps || []).map((step) => <p key={step}>{step}</p>)}
+                              </div>
+                            </div>
+                          )}
 
                           {aiProposal?.files.length > 0 && (
                             <div className="ai-review-panel">

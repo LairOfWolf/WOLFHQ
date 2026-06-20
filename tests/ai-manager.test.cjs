@@ -236,10 +236,15 @@ test("searches contents, validates a provider proposal, backs up, and applies se
   assert.doesNotMatch(providerRequest, /private-license/);
   assert.equal(JSON.parse(providerRequest).max_tokens, 2048);
 
-  await manager.apply(proposal.files);
+  const applyReport = await manager.apply(proposal.files);
   assert.deepEqual(backups, ["pre-ai-edit"]);
   assert.deepEqual(writes, [configPath]);
   assert.match(content.get(configPath), /27500/);
+  assert.equal(applyReport.files.length, 1);
+  assert.equal(applyReport.files[0].changed, true);
+  assert.equal(applyReport.files[0].verified, true);
+  assert.deepEqual(applyReport.changedFiles, [configPath]);
+  assert.ok(applyReport.nextSteps.some((step) => /Rescan WOLFHQ/i.test(step)));
   assert.ok(audits.some((entry) => entry.action === "ai.proposed"));
   assert.ok(audits.some((entry) => entry.action === "ai.applied"));
 });
